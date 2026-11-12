@@ -149,12 +149,12 @@ h1,h2,h3{font-family:var(--font-head);margin:0;text-wrap:balance}
 .nav svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 
 /* modal + pin */
-#modal{position:fixed;inset:0;z-index:40}
-.scrim{position:absolute;inset:0;background:rgba(8,14,20,.55)}
+#modal{position:fixed;top:0;left:0;right:0;bottom:0;z-index:40}
+.scrim{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(8,14,20,.55)}
 .sheet{position:absolute;left:0;right:0;bottom:0;margin:0 auto;max-width:560px;max-height:92%;overflow:auto;background:var(--surface);border-radius:16px 16px 0 0;
   padding:18px max(16px,env(safe-area-inset-left,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-right,0px));box-shadow:var(--shadow)}
 .sheet h3{font-size:20px;margin-bottom:12px}
-#pin{position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px}
+#pin{position:fixed;top:0;left:0;right:0;bottom:0;z-index:60;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px}
 .pin-card{width:100%;max-width:360px;text-align:center}
 .pin-tag{display:inline-block;font:600 11px/1 var(--font-body);letter-spacing:.1em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);padding:6px 10px;border-radius:5px}
 .pin-card h3{font-size:22px;margin:14px 0 4px}
@@ -201,6 +201,28 @@ svg.map{background:var(--surface-2);border-radius:8px;border:1px solid var(--lin
 <div id="pin" hidden></div>
 <div id="toast" role="status" aria-live="polite"></div>
 
+<script>
+/* affiche toute erreur de l'application en bandeau rouge (aide au dépannage) */
+(function(){
+  function show(m){try{
+    var d=document.getElementById('errbar');
+    if(!d){d=document.createElement('div');d.id='errbar';d.setAttribute('role','alert');
+      d.style.cssText='position:fixed;left:0;right:0;top:0;z-index:99999;background:#B3261E;color:#fff;font:12px/1.35 monospace;padding:8px 10px;white-space:pre-wrap;word-break:break-all';
+      d.onclick=function(){d.remove()};document.body.appendChild(d)}
+    var ua=(navigator.userAgent.match(/Chrome\/[\d.]+/)||['?'])[0];
+    d.textContent='Erreur (touchez pour fermer) : '+m+'\n'+ua}catch(e){}}
+  var DBG=false;try{if(/[?&]debug=1/.test(location.search))localStorage.setItem('interkin-debug','1');if(/[?&]debug=0/.test(location.search))localStorage.removeItem('interkin-debug');DBG=localStorage.getItem('interkin-debug')==='1'}catch(e){}
+  var lines=[];window.dbg=function(m){if(!DBG)return;try{
+    lines.push(new Date().toLocaleTimeString('fr-FR')+' '+m);if(lines.length>9)lines.shift();
+    var d=document.getElementById('dbgbar');
+    if(!d){d=document.createElement('div');d.id='dbgbar';d.style.cssText='position:fixed;left:0;bottom:0;z-index:99998;background:rgba(0,0,0,.82);color:#7CFC9A;font:11px/1.3 monospace;padding:4px 6px;pointer-events:none;max-width:100%';document.body.appendChild(d)}
+    d.textContent='DIAG '+lines.join('\n');d.style.whiteSpace='pre'}catch(e){}};
+  window.dbg('ecran '+innerWidth+'x'+innerHeight+' '+((navigator.userAgent.match(/Chrome\/[\d.]+/)||['?'])[0])+' inset:'+(window.CSS&&CSS.supports?CSS.supports('inset','0'):'?'));
+  document.addEventListener('touchstart',function(e){var t=e.touches&&e.touches[0];window.dbg('touch '+(t?Math.round(t.clientX)+','+Math.round(t.clientY):'?'))},true);
+  window.addEventListener('error',function(e){show((e.message||'erreur')+(e.lineno?' [ligne '+e.lineno+']':''))});
+  window.addEventListener('unhandledrejection',function(e){var r=e.reason;show('promesse : '+((r&&r.message)||r))});
+})();
+</script>
 <script>
 (function(){
 'use strict';
@@ -493,8 +515,9 @@ function processLogo(file,cb){
 /* ---------- messages ---------- */
 var toastT;
 function toast(msg){var t=$('#toast');t.textContent=msg;t.className='show';clearTimeout(toastT);toastT=setTimeout(function(){t.className=''},2800)}
-function openModal(html){M={};var m=$('#modal');m.innerHTML='<div class="scrim" data-a="closeModal"></div><div class="sheet" role="dialog" aria-modal="true">'+html+'</div>';m.hidden=false}
-function closeModal(){var m=$('#modal');m.hidden=true;m.innerHTML='';M={}}
+var modalAt=0,lastTap=null;
+function openModal(html){modalAt=Date.now();if(window.dbg)dbg('modal ouvert');M={};var m=$('#modal');m.innerHTML='<div class="scrim" data-a="closeModal"></div><div class="sheet" role="dialog" aria-modal="true">'+html+'</div>';m.hidden=false;if(window.dbg){var sh=m.querySelector('.sheet');dbg('taille fond '+m.offsetWidth+'x'+m.offsetHeight+' fiche '+(sh?sh.offsetWidth+'x'+sh.offsetHeight:'-'))}}
+function closeModal(){if(window.dbg)dbg('modal ferme');var m=$('#modal');m.hidden=true;m.innerHTML='';M={}}
 
 /* ---------- écran code secret (client) ---------- */
 function openPin(cfg){P=Object.assign({digits:'',step:1,first:'',msg:'',tries:0},cfg);renderPin()}
@@ -1436,6 +1459,10 @@ function resetPinFlow(custId,reqId){
 /* ---------- écouteurs ---------- */
 document.addEventListener('click',function(e){
   var b=e.target.closest('[data-a]');if(!b)return;
+  /* certains écrans tactiles envoient un 2e clic au même endroit : il ne doit pas fermer la fenêtre qui vient de s'ouvrir */
+  var tp=lastTap;lastTap={x:e.clientX,y:e.clientY,t:Date.now()};
+  if(window.dbg)dbg('clic '+b.dataset.a+(b.classList.contains('scrim')?' (fond)':'')+' @'+Math.round(e.clientX)+','+Math.round(e.clientY));
+  if(b.dataset.a==='closeModal'&&b.classList.contains('scrim')&&Date.now()-modalAt<1500)return;
   if(OWNER_ONLY[b.dataset.a]&&!(U.user&&U.user.role==='owner')){toast('Réservé au propriétaire.');return}
   var f=A[b.dataset.a];if(f)f(b.dataset,e);
   if(SYNC_ON&&STOCK_ACT[b.dataset.a])Sync.dirtyStock();
@@ -1715,7 +1742,7 @@ var Sync=(function(){
     if(busy)return busy;
     if(!ST.auth||(!U.user&&!force))return Promise.resolve();
     busy=run().then(function(ch){
-      busy=null;if(ch||needRender){if(U.user&&idle()){needRender=false;render()}else needRender=true}
+      busy=null;if(ch||needRender){if(U.user&&idle()){needRender=false;if(window.dbg)dbg('affichage rafraichi (synchro)');render()}else needRender=true}
     },function(e){
       busy=null;
       if(e===HALT)return;
