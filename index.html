@@ -590,7 +590,7 @@ function viewLogin(){
   return '<div class="login"><div class="brand">Interkin <span class="demo">Démo</span></div><h1>Ouvrir une session</h1>'
    +'<p class="muted" style="margin:0 0 20px">Entrez votre numéro et votre mot de passe.</p>'
    +'<div class="card"><label class="lbl" for="lph">Numéro de téléphone</label><input id="lph" class="inp" inputmode="tel" autocomplete="username" placeholder="ex. 0811100001">'
-   +'<label class="lbl" for="lpw">Mot de passe</label><input id="lpw" type="password" class="inp" autocomplete="current-password">'
+   +'<label class="lbl" for="lpw">Mot de passe</label>'+pwField('lpw','current-password')+''
    +'<label class="lbl" for="lpdv">Point de vente (propriétaire seulement)</label><select id="lpdv" class="sel" data-c="lpdv">'+opts+'</select>'
    +'<button class="btn primary big wide" style="margin-top:18px" data-a="login">Ouvrir la session</button></div>'
    +'<button class="btn wide" style="margin-top:12px" data-a="balOpen">Consulter le solde d’un client</button>'
@@ -1036,6 +1036,7 @@ function manageGen(){
 
 
 /* ---------- comptes et caisse ---------- */
+function pwField(id,ac){return '<div class="row"><input id="'+id+'" type="password" class="inp grow" autocomplete="'+(ac||'off')+'"><button type="button" class="btn" data-a="showpw" data-t="'+id+'" aria-label="Afficher ou masquer le mot de passe">Afficher</button></div>'}
 function whoName(u){return u.role==='owner'?'Propriétaire':u.name}
 function logEv(type,txt){S.log.unshift({ts:Date.now(),uid:U.user?U.user.id:null,name:U.user?whoName(U.user):'Système',pdvId:U.user?U.user.pdvId:null,type:type,txt:txt});if(S.log.length>600)S.log.length=600}
 function userById(id){return S.users.find(function(u){return u.id===id})||null}
@@ -1110,7 +1111,8 @@ function cashAdminView(){
   return h;
 }
 function staffView(){
-  var h='<h2 class="h">Comptes des vendeurs</h2>';
+  var h='<h2 class="h">Mon compte</h2><div class="card"><div class="item"><div class="grow"><div style="font-weight:600">Propriétaire</div><div class="small muted num">'+esc((userById('u0')||{}).phone||'')+'</div></div><button class="btn sm" data-a="pwSeller" data-id="u0">Changer mon mot de passe</button></div></div>';
+  h+='<h2 class="h">Comptes des vendeurs</h2>';
   S.pdvs.forEach(function(pd){
     var us=S.users.filter(function(u){return u.role==='seller'&&u.pdvId===pd.id});
     h+='<div class="card" style="margin-top:12px"><div class="sub-h" style="margin-top:0">PDV '+esc(pd.name)+'</div>'+(us.length?us.map(function(u){var sh=openShift(u.id);
@@ -1118,7 +1120,7 @@ function staffView(){
   });
   h+='<h2 class="h">Créer un compte vendeur</h2><div class="card"><label class="lbl" for="nsn">Nom</label><input id="nsn" class="inp" maxlength="40">'
    +'<label class="lbl" for="nsp">Numéro de téléphone (identifiant)</label><input id="nsp" class="inp" inputmode="tel">'
-   +'<label class="lbl" for="nspw">Mot de passe (6 caractères minimum)</label><input id="nspw" class="inp" autocomplete="off">'
+   +'<label class="lbl" for="nspw">Mot de passe (6 caractères minimum)</label>'+pwField('nspw')+''
    +pdvSelect('nspd',S.pdvs[0]&&S.pdvs[0].id)+'<label class="lbl" for="nssh">Poste</label><select id="nssh" class="sel"><option value="matin">Matin</option><option value="soir">Soir</option></select>'
    +'<button class="btn primary wide" style="margin-top:14px" data-a="addSeller">Créer le compte</button>'
    +'<div class="hint" style="margin-top:8px">Seul le propriétaire crée, modifie ou supprime les comptes. Le vendeur se connecte avec ce numéro et ce mot de passe.</div></div>';
@@ -1169,6 +1171,7 @@ var A={
     U.fails[ph]=null;startSession(u);
   },
   logout:function(){var u=U.user;if(u&&u.role!=='owner'&&openShift(u.id)){A.closeCash();return}logoutNow()},
+  showpw:function(d,e){var i=$('#'+d.t);if(!i)return;var show=i.type==='password';i.type=show?'text':'password';e.target.closest('button').textContent=show?'Masquer':'Afficher'},
   mgtab:function(d){U.mg=d.v;render()},
   openCashOk:function(){startShift(suggestedFloat(U.user.pdvId))},
   openCashDiff:function(){var v=num('ofl');if(isNaN(v)||v<0){toast('Saisissez le montant compté.');return}startShift(v)},
@@ -1199,7 +1202,7 @@ var A={
     if(openShift(u.id)){toast('Clôturez d’abord son service (bouton Clôturer dans Caisse).');return}
     if(!btn.dataset.ok){btn.dataset.ok='1';btn.textContent='Confirmer';return}
     S.users=S.users.filter(function(x){return x.id!==u.id});logEv('seller_del','Compte vendeur supprimé : '+u.name);save();render();toast('Compte supprimé.')},
-  pwSeller:function(d){var u=userById(d.id);if(!u)return;openModal('<h3>Nouveau mot de passe</h3><p class="muted" style="margin:0 0 10px">'+esc(u.name)+'</p><label class="lbl" for="npw">Mot de passe (6 caractères minimum)</label><input id="npw" class="inp" autocomplete="off"><div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="pwDo" data-id="'+u.id+'">Enregistrer</button></div>')},
+  pwSeller:function(d){var u=userById(d.id);if(!u)return;openModal('<h3>Nouveau mot de passe</h3><p class="muted" style="margin:0 0 10px">'+esc(u.role==='owner'?'Compte propriétaire':u.name)+'</p><label class="lbl" for="npw">Mot de passe (6 caractères minimum)</label>'+pwField('npw')+'<div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="pwDo" data-id="'+u.id+'">Enregistrer</button></div>')},
   pwDo:function(d){var u=userById(d.id),pw=$('#npw').value;if(!u)return;if(pw.length<6){toast('6 caractères minimum.');return}u.pw=hashPw(pw,u.id);logEv('seller_pw','Mot de passe changé : '+u.name);save();closeModal();toast('Mot de passe modifié.')},
   delPdv:function(d,e){var pd=pdvById(d.id),btn=e.target.closest('button');if(!pd)return;
     if(S.pdvs.length<=1){toast('Il faut garder au moins un point de vente.');return}
