@@ -227,6 +227,8 @@ var tstr=function(ts){return new Date(ts).toLocaleTimeString('fr-FR',{hour:'2-di
 var ago=function(ts){var m=Math.round((Date.now()-ts)/60000);if(m<1)return 'à l’instant';if(m<60)return 'il y a '+m+' min';var h=Math.round(m/60);if(h<24)return 'il y a '+h+' h';return dstr(ts)+' '+tstr(ts)};
 var ROLE={owner:'Propriétaire',matin:'Vendeur matin',soir:'Vendeur soir'};
 var LOW=5;
+var live=function(l){return l.filter(function(s){return !s.cancelled})};
+var PERLAB={today:'Aujourd’hui',week:'Cette semaine',month:'Ce mois',all:'Toute la période'};
 
 /* ---------- données ---------- */
 function seed(){
@@ -291,6 +293,20 @@ function seed(){
 }
 function load(){try{var r=localStorage.getItem(KEY);if(r){var o=JSON.parse(r);if(o&&o.v===2)return o}}catch(e){}return null}
 var S=load()||seed();
+/* ---------- comptes, caisse, journal ---------- */
+var hashPw=function(pw,id){return cyrb53(pw+':'+id+':interkin-pw')};
+function ensureAccounts(S){
+  S.shifts=S.shifts||[];S.withdrawals=S.withdrawals||[];S.log=S.log||[];S.floats=S.floats||{};
+  if(!S.users){
+    S.users=[{id:'u0',name:'Propriétaire',phone:'0800000000',pw:hashPw('interkin2026','u0'),role:'owner',pdvId:null}];
+    var n=0;S.pdvs.forEach(function(p,i){['matin','soir'].forEach(function(sh,j){n++;
+      S.users.push({id:'u'+n,name:'Vendeur '+sh+' '+p.name,phone:'081'+(i+1)+'00000'+(j+1),pw:hashPw('vente123','u'+n),role:'seller',shift:sh,pdvId:p.id})})});
+  }
+  S.sales.forEach(function(x){if(x.sellerId===undefined){
+    var u=x.role==='owner'?S.users[0]:S.users.find(function(z){return z.role==='seller'&&z.pdvId===x.pdvId&&z.shift===x.role});
+    x.sellerId=u?u.id:null;x.sellerName=u?(u.role==='owner'?'Propriétaire':u.name):null}});
+}
+ensureAccounts(S);
 var LOGO0='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJYAAADAAQAAAADOraelAAABUWlDQ1BJQ0MgUHJvZmlsZQAAeJx9kL9LAmEcxj+nhWA2RA0NDTdFwxWiQS0NahBFw2EFatN5/gS1l7uLENr6B4T+gwqa25IGGxsagqgpamtqKmgpeePuDI2oZ3k/PO/Dw5cHApOGELUhoN5wrPRKUs1kc2roGQUFT4Zpi4Sur7v8/f7U+72fvZ11u37//6twoWibwCcQNYXlgKIB+p4jXN4HJqxMNgdKy+Wyzycu530+9zKb6RQo14BqVowCKC+Alh/wywNcr+2avRvc6yPFxtaG2wNMsUwVG0ENgyYqOvE/8vNePsUOgiYWVcpUcFBJILyGIiqrNDCZQ0MlRpQYMXfn3n53vf20vnfwBEsdKeVF31vrwNkChNt9b2YRxkbgqi0My/CsIBAoleD1FEazMH4D4W27FI/510eSMPwo5ds0hA6h25Ly40jK7jEEH+Cy8QUDp2ITOrol5gAABE9JREFUeNrllz9s3UQcx7/3s8vzEOo3MoQ8DwxslC2gKrHCkgkxM2VgYUEZQxU1bsiQCXVkI2KqmDqmUoRcJUOkSiWCpQMCk1QoSEj4lUr1i873Y7g/Pp8fRTAhYSnR6eM7//7c9/e7e4IRPi254ZkbEYbPy1iBQ8iAlQAaO5H1s7KJdy70UFqGBtuRYcL4R23UXpM9/1oShLZv4ykYAlmPjQEFy7QNpYR6W4nWt9FGQgKjWeTZKLB4h2TV8znhVWb+Q77HzCz1vC39Xp54dvMsB5BcJt7acsTMzEXqrYWesNHzeRMA8JrPSuNE47EvDDvy2EeGLXtsVyMRe0xcAQDv9uzuZACexf19+xngsRmbV6IQAJW9vZw1AG6v9vZyyjUmyrDY5jHlgV72zZ/HaJZjVvTtAg8FRsHaJUBUARMSaqDTiOdrt+qxGjgdaBe4OdR4+/Hwe+1uMWAkShhKXLhwdE6v3LzMryNlk2v3+EWXA/76c+PqglOnemTtFoTaxPu9DbCMbeHFy81z55+B7Zqt0IpqG8dnLo64MtmgyJpYGNQ+A1SqkDaEoMEoSNpM+ywqF+f0kmwOq/5pH5rHKtzomI5Xmo0Pepj917EawFOE/aXbPMPUMoD14HuLAKd9NnoVUEt5T+PxPvbk0aiv+5PoWjUzjLRFuqh+PP8uqMvNJrvnpFqnzMx8fMypHpWLsasZfksEtZUmt941JjLLForDMg3m0VcX0zSst+krvwxyv3W6bjt/bLX24evjwbxUOemTaZdItnOEtR8/eDysaZsB5OSqds/tYKeD9W7P3Qc7HQg5kn09kySov9eVAojCQ1SAnHLMIwESrokDmOW4JNjyWGVm/TKSYLN0h40kR9LZ3YeXP5Oi2adwRwlXgS8TSd0S12kICwHLAQ7iECxJd3dl/GFWndZU536ngxqTObnKBqxG9W/r93/OTnFXj6eC8DADwHyHI653KkxKYAdgSUDBCnXprl45vO0CAJ7UZyBgjAnO9fEoMX2/0XbHWoMsYuDY1FHiiYVvavbcSboADjRrKitqiOYbzfxSik1sos78wPS8xps41oyLOXk58mqwNmzJ3BFozr2JwXtrRru/dz4Xx3pe1BRG8oA4MWtjl4O0tb1k68CtfZYYtuJcmd4wPrtUR0C9YVimA1mVQGL9685CUbs97/rEdmlY0hX2SmVyFY+9lmPmUTdv6dLWamPuTreR3rL3P4m+NrzTDkDypWbnuNJ5UaKOn4D0EZgDQCsIoFMQIPrXF4EY2BV7GOf6Rb4udiE89c0SoQC04qW/P/7rdVl5rfKv48gvq7PgdwpXP+BQBncLlJBNaOMA1yk4B/mN+1cqYGq9mYX+tXffjIuA/Zp94G6WllHe9QVnq+hOEtfbUcXBHR0vkNG90OeiQrh2XGaDO3qyAdvKOrv3K4Q5oCeZu9I4X35z1d7Z/QS4HrI1v+PpZ/Xip28b8/vyT1Nx3eppxrZkAAAAAElFTkSuQmCC';
 var brand=function(){if(!S.brand)S.brand={name:'',slogan:'',logo:'',lw:0,lh:0};if(S.brand.name==='FFLEXY POS')S.brand.name='';
   if(!S.brand.logo&&!S.brand.noLogo){S.brand.logo=LOGO0;S.brand.lw=150;S.brand.lh=192}
@@ -299,7 +315,7 @@ function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 
 /* ---------- état d'interface ---------- */
 var U={online:(typeof navigator==='undefined'||navigator.onLine!==false),user:null,lrole:'matin',lpdv:null,tab:'sale',cart:[],client:undefined,cq:'',usePoints:false,unlocked:false,pts:'',cash:'',keep:false,
-  cl:'',rday:'',rper:'today',rpdv:'all',spdv:null,confirmReset:false};
+  cl:'',rday:'',rper:'today',rpdv:'all',spdv:null,confirmReset:false,fails:{},mg:'gen'};
 var M={};   // état du modal ouvert
 var P=null; // état de l'écran de code secret
 
@@ -350,7 +366,7 @@ function finalizeSale(){
   if(c.pu>0&&!U.online){toast('Hors ligne : points indisponibles.','bad');return}
   var user=U.user,cust=c.cust,no=++S.saleSeq,pdv=user.pdvId,cogs=0;
   U.cart.forEach(function(i){cogs+=(i.cost||0)*i.qty});
-  var sale={id:'s'+(++S.seq),no:no,ts:Date.now(),pdvId:pdv,role:user.role,custId:cust?cust.id:null,custName:cust?cust.name:null,
+  var sale={id:'s'+(++S.seq),no:no,ts:Date.now(),pdvId:pdv,role:user.role,sellerId:user.id,sellerName:whoName(user),custId:cust?cust.id:null,custName:cust?cust.name:null,
     items:U.cart.map(function(i){var pr=prodById(i.id);return {id:i.id,name:i.name,price:i.price,qty:i.qty,cost:i.cost||0,use:((pr&&pr.recipe)||[]).map(function(r){return {ing:r.ing,q:r.g}})}}),
     total:c.total,pointsUsed:c.pu,cashDue:c.due,cashPaid:c.paid,change:c.change,kept:c.keep,
     cashNet:c.paid-(c.change-c.keep),earned:0,balanceAfter:null,cogs:cogs,profit:c.total-cogs,offline:!U.online,pending:!U.online};
@@ -378,7 +394,7 @@ function finalizeSale(){
     var s=st(p,pdv);if(s!==null)p.stock[pdv]=Math.max(0,s-i.qty);
     (p.recipe||[]).forEach(function(r){var g=ingById(r.ing);if(!g)return;var q=ist(g,pdv);if(!q)return;var u=i.qty*r.g;q.cur=r6(q.cur-u);q.used=r6(q.used+u)});
   });
-  S.sales.unshift(sale);save();resetSale();
+  S.sales.unshift(sale);logEv('sale','Vente N° '+pad(no)+' : '+fmt(sale.total)+' FC');save();resetSale();
   U.tab='sale';render();showTicket(sale,true);
 }
 function resetSale(){U.cart=[];U.client=undefined;U.cq='';U.usePoints=false;U.unlocked=false;U.pts='';U.cash='';U.keep=false}
@@ -388,7 +404,8 @@ function breakdown(id){
   S.ledger.forEach(function(l){if(l.acc!==id)return;b.total+=l.pts;
     if(l.type==='earn_purchase'||l.type==='initial')b.buy+=l.pts;
     else if(l.type==='earn_sponsor1'||l.type==='earn_sponsor2')b.sp+=l.pts;
-    else if(l.type==='earn_change')b.chg+=l.pts;else if(l.type==='spend')b.used+=-l.pts});
+    else if(l.type==='earn_change')b.chg+=l.pts;else if(l.type==='spend')b.used+=-l.pts;
+    else if(l.type==='cancel'){var o=l.of;if(o==='earn_purchase'||o==='initial')b.buy+=l.pts;else if(o==='earn_sponsor1'||o==='earn_sponsor2')b.sp+=l.pts;else if(o==='earn_change')b.chg+=l.pts;else if(o==='spend')b.used+=-l.pts}});
   return b;
 }
 
@@ -402,7 +419,7 @@ function periodStart(per){
 }
 function baseSales(){
   var u=U.user;
-  return S.sales.filter(function(s){if(u.role!=='owner')return s.pdvId===u.pdvId&&s.role===u.role;return U.rpdv==='all'||s.pdvId===U.rpdv});
+  return live(S.sales).filter(function(s){if(u.role!=='owner')return s.sellerId===u.id;return U.rpdv==='all'||s.pdvId===U.rpdv});
 }
 function inPeriod(list,per){var t=periodStart(per);return list.filter(function(s){return s.ts>=t})}
 var profitOf=function(x){return x.total-(x.cogs||0)};
@@ -420,7 +437,8 @@ function ticketLines(s){
   var rule='-'.repeat(W),pdv=pdvById(s.pdvId),L=[];
   var br=brand();
   if(String(br.name||'').trim())L.push(center(String(br.name).trim()));
-  L.push(center('PDV '+(pdv?pdv.name:'?')),center(ROLE[s.role]),rule);
+  L.push(center('PDV '+(pdv?pdv.name:'?')),center(s.sellerName||ROLE[s.role]),rule);
+  if(s.cancelled){L.push(center('*** VENTE ANNULEE ***'),rule)}
   L.push(lr('Ticket N°',pad(s.no)),lr(dstr(s.ts),tstr(s.ts)));
   L.push(s.custName?('Client: '+s.custName).slice(0,W):'Client sans compte',rule);
   s.items.forEach(function(i){L.push(String(i.name).slice(0,W));L.push(lr('  '+i.qty+' x '+fmt(i.price),fmt(i.qty*i.price)))});
@@ -559,6 +577,7 @@ function profitChart(base,key,label){key=key||'profit';label=label||'Bénéfices
 
 /* ---------- vues ---------- */
 var ICON={
+  cash:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 14.5h2"/>',
   sale:'<path d="M3 4h2l2.4 10.2a1 1 0 0 0 1 .8h8.2a1 1 0 0 0 1-.76L19.5 8H6.2"/><circle cx="9" cy="19" r="1.4"/><circle cx="17" cy="19" r="1.4"/>',
   clients:'<circle cx="9" cy="8" r="3.2"/><path d="M3 19c.6-3.4 3-5 6-5s5.4 1.6 6 5"/><path d="M16 5.5a3 3 0 0 1 0 5.6M18 14.4c1.8.7 2.7 2.2 3 4.6"/>',
   products:'<path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5 12 12l8.5-4.5M12 12v9"/>',
@@ -568,24 +587,24 @@ var ICON={
 
 function viewLogin(){
   var opts=S.pdvs.map(function(p){return '<option value="'+p.id+'"'+((U.lpdv||S.pdvs[0].id)===p.id?' selected':'')+'>'+esc(p.name)+'</option>'}).join('');
-  var seg=['owner','matin','soir'].map(function(r){return '<button data-a="lrole" data-v="'+r+'" aria-pressed="'+(U.lrole===r)+'">'+(r==='owner'?'Propriétaire':r==='matin'?'Matin':'Soir')+'</button>'}).join('');
   return '<div class="login"><div class="brand">Interkin <span class="demo">Démo</span></div><h1>Ouvrir une session</h1>'
-   +'<p class="muted" style="margin:0 0 20px">Choisissez votre profil et votre point de vente.</p>'
-   +'<div class="card"><label class="lbl" for="rolegrp">Profil</label><div class="seg" id="rolegrp" role="group">'+seg+'</div>'
-   +'<label class="lbl" for="lpdv">Point de vente</label><select id="lpdv" class="sel" data-c="lpdv">'+opts+'</select>'
+   +'<p class="muted" style="margin:0 0 20px">Entrez votre numéro et votre mot de passe.</p>'
+   +'<div class="card"><label class="lbl" for="lph">Numéro de téléphone</label><input id="lph" class="inp" inputmode="tel" autocomplete="username" placeholder="ex. 0811100001">'
+   +'<label class="lbl" for="lpw">Mot de passe</label><input id="lpw" type="password" class="inp" autocomplete="current-password">'
+   +'<label class="lbl" for="lpdv">Point de vente (propriétaire seulement)</label><select id="lpdv" class="sel" data-c="lpdv">'+opts+'</select>'
    +'<button class="btn primary big wide" style="margin-top:18px" data-a="login">Ouvrir la session</button></div>'
    +'<button class="btn wide" style="margin-top:12px" data-a="balOpen">Consulter le solde d’un client</button>'
-   +'<div class="note" style="margin-top:14px">Démonstration : les données sont enregistrées sur cet appareil seulement, avec des ventes d’exemple sur 35 jours. Les clients de départ ont le code secret 1234. Les positions et l’impression sont simulées.</div></div>';
+   +'<div class="note" style="margin-top:14px">Démonstration. Propriétaire : 0800000000 / interkin2026. Vendeurs : 0811000001, 0811000002 (Gombe), 0812000001, 0812000002 (Limete) / vente123. Les données sont enregistrées sur cet appareil seulement. Les clients de départ ont le code secret 1234.</div></div>';
 }
 function topbar(){
   var u=U.user,p=pdvById(u.pdvId);
   return '<header class="top"><div><div class="brand">Interkin <span class="demo">Démo</span></div>'
-   +'<div class="who"><span>PDV '+esc(p?p.name:'')+' · '+ROLE[u.role]+'</span><span class="live'+(S.geoEnabled?'':' off')+'"><i></i>Position '+(S.geoEnabled?'active (simulée)':'désactivée')+'</span><span id="net">'+netHTML()+'</span></div></div>'
+   +'<div class="who"><span>PDV '+esc(p?p.name:'')+' · '+esc(whoName(u))+'</span><span class="live'+(S.geoEnabled?'':' off')+'"><i></i>Position '+(S.geoEnabled?'active (simulée)':'désactivée')+'</span><span id="net">'+netHTML()+'</span></div></div>'
    +'<button class="btn sm" data-a="logout">Quitter</button></header>';
 }
 function navHTML(){
   var t=[['sale','Vente'],['clients','Clients'],['products','Produits'],['stock','Stock'],['reports','Rapports']];
-  if(U.user.role==='owner')t.push(['manage','Gestion']);
+  if(U.user.role==='owner')t.push(['manage','Gestion']);else t.push(['cash','Caisse']);
   return t.map(function(x){return '<button data-a="tab" data-v="'+x[0]+'"'+(U.tab===x[0]?' aria-current="page"':'')+'><svg viewBox="0 0 24 24" aria-hidden="true">'+ICON[x[0]]+'</svg>'+x[1]+'</button>'}).join('');
 }
 
@@ -905,10 +924,10 @@ function consoHTML(){
   var h='<h2 class="h">Consommation d’intrants</h2><div class="seg">'+seg+'</div><div class="card" style="margin-top:12px"><label class="lbl" for="rday">'+(per==='day'?'Date':'Une date de la période')+'</label>'
     +'<input id="rday" type="date" class="inp" data-c="rday" value="'+esc(day)+'"><div class="hint" style="margin-top:6px">Période affichée : <b>'+esc(lab)+'</b>. Quantités calculées d’après les recettes des produits vendus.</div></div>';
   pdvs.forEach(function(pd){
-    var l=S.sales.filter(function(x){return x.pdvId===pd.id&&inR(x)});
+    var l=live(S.sales).filter(function(x){return x.pdvId===pd.id&&inR(x)});
     h+='<div class="card" style="margin-top:12px"><div class="sub-h" style="margin-top:0">PDV '+esc(pd.name)+' · '+l.length+' vente(s)</div>'+rowsOf(consumption(l))+'</div>';
   });
-  if(pdvs.length>1){var l2=S.sales.filter(function(x){return pdvs.some(function(pd){return pd.id===x.pdvId})&&inR(x)});
+  if(pdvs.length>1){var l2=live(S.sales).filter(function(x){return pdvs.some(function(pd){return pd.id===x.pdvId})&&inR(x)});
     h+='<div class="card" style="margin-top:12px"><div class="sub-h" style="margin-top:0">Total de tous les points de vente · '+l2.length+' vente(s)</div>'+rowsOf(consumption(l2))+'</div>'}
   return h;
 }
@@ -916,6 +935,7 @@ function alertsHTML(){
   var a=[],all=U.rpdv==='all';
   S.products.forEach(function(p){S.pdvs.forEach(function(pd){var s=st(p,pd.id);if(s!==null&&s<=LOW&&(all||U.rpdv===pd.id))a.push('<div class="note bad"><b>Stock bas</b> · '+esc(p.name)+' au PDV '+esc(pd.name)+' : '+s+' unité(s)</div>')})});
   S.ingredients.forEach(function(g){S.pdvs.forEach(function(pd){if(!all&&U.rpdv!==pd.id)return;var lc=lastCount(g.id,pd.id);if(lc&&!lc.ok)a.push('<div class="note bad"><b>Consommation hors marge</b> · '+esc(g.name)+' au PDV '+esc(pd.name)+' : écart '+(lc.pct>0?'+':'')+dec(lc.pct)+' % (marge '+S.margin+' %)</div>')})});
+  S.shifts.filter(function(h){return h.state==='closed'&&h.diff&&Date.now()-h.closeTs<7*864e5}).slice(-5).forEach(function(h){a.push('<div class="note bad"><b>Écart de caisse</b> · '+esc(h.name)+' : '+(h.diff<0?'manque ':'excédent ')+fmt(Math.abs(h.diff))+' FC ('+dstr(h.closeTs)+')</div>')});
   var pend=S.resets.filter(function(r){return r.status==='pending'}).length;
   if(pend)a.push('<div class="note pts"><b>'+pend+' demande(s)</b> de réinitialisation de code secret en attente (onglet Gestion).</div>');
   return '<h2 class="h">Alertes</h2>'+(a.length?a.join(''):'<div class="note good">Aucune alerte.</div>');
@@ -935,7 +955,7 @@ function reportsView(){
      +alertsHTML()+consoHTML()
      +'<div class="note" style="margin-top:12px">Démo : ce tableau de bord lit les données de cet appareil. Avec la synchronisation, vous le consulterez à distance depuis votre téléphone, en temps réel.</div>'
      +'<h2 class="h">Détail par période</h2>';
-  }else h+='<p class="hint" style="margin:8px 0 0">Vos ventes de ce poste ('+ROLE[u.role]+').</p>';
+  }else h+='<p class="hint" style="margin:8px 0 0">Vos ventes : '+esc(whoName(u))+'.</p>';
   var per=[['today','Jour'],['week','Semaine'],['month','Mois'],['all','Tout']].map(function(x){return '<button data-a="rper" data-v="'+x[0]+'" aria-pressed="'+(U.rper===x[0])+'">'+x[1]+'</button>'}).join('');
   h+='<div class="seg" style="margin-top:'+(owner?0:12)+'px">'+per+'</div><div class="kpis" style="margin-top:14px">'
    +'<div class="kpi"><div class="k">Ventes</div><div class="v">'+fmt(a.total)+' FC</div><div class="s">'+a.n+' ticket(s)</div></div>'
@@ -943,13 +963,25 @@ function reportsView(){
    +'<div class="kpi"><div class="k">Payé en points</div><div class="v pts">'+fmt(a.disc)+' FC</div><div class="s">points des clients devenus argent de l’entreprise</div></div>'
    +'<div class="kpi"><div class="k">Espèces encaissées</div><div class="v">'+fmt(a.cash)+' FC</div><div class="s">monnaie gardée incluse</div></div>'
    +'<div class="kpi"><div class="k">Points générés</div><div class="v">'+fmt(a.earned)+'</div><div class="s">dont monnaie : '+fmt(a.kept)+'</div></div></div>';
-  if(owner){var allS=inPeriod(S.sales,U.rper);
+  if(owner){var allS=inPeriod(live(S.sales),U.rper);
     h+='<h2 class="h">Par point de vente</h2><div class="card">'+S.pdvs.map(function(pd){var q=agg(allS.filter(function(x){return x.pdvId===pd.id}));
-      return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(pd.name)+'</div><div class="small muted">'+q.n+' ticket(s) · achats '+fmt(q.cogs)+' FC</div></div><div style="text-align:right"><b class="num">'+fmt(q.total)+' FC</b><div class="small num '+(q.profit<0?'bad':'good')+'">bénéfice '+fmt(q.profit)+'</div></div></div>'}).join('')+'</div>'}
+      return '<button class="rowbtn" data-a="pvdetail" data-id="'+pd.id+'" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(pd.name)+'</div><div class="small muted">'+q.n+' ticket(s) · achats '+fmt(q.cogs)+' FC · voir les ventes</div></div><div style="text-align:right"><b class="num">'+fmt(q.total)+' FC</b><div class="small num '+(q.profit<0?'bad':'good')+'">bénéfice '+fmt(q.profit)+'</div></div></button>'}).join('')+'</div>';
+    h+='<h2 class="h">Par vendeur</h2><div class="card">'+sellerList().map(function(sl){var pd=pdvById(sl.pdvId),l=live(S.sales).filter(function(x){return x.sellerId===sl.id}),
+        q=agg(inPeriod(l,U.rper)),t3=['today','week','month'].map(function(per){return agg(inPeriod(l,per)).total});
+      return '<button class="rowbtn" data-a="sdetail" data-id="'+sl.id+'" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(sl.name)+(sl.gone?' (supprimé)':'')+'</div><div class="small muted">'+(pd?'PDV '+esc(pd.name)+' · ':'')+q.n+' ticket(s)</div>'
+        +'<div class="small num muted" style="margin-top:3px">Jour '+fmt(t3[0])+' · Semaine '+fmt(t3[1])+' · Mois '+fmt(t3[2])+'</div></div><b class="num">'+fmt(q.total)+' FC</b></button>'}).join('')
+      +'<div class="hint" style="margin-top:8px">Le montant de droite suit la période choisie ci-dessous. Touchez un vendeur pour voir ses ventes.</div></div>'}
   h+='<h2 class="h">Tickets</h2><div class="card">'+(list.length?list.slice(0,60).map(function(s){var p=pdvById(s.pdvId);
-    return '<button class="rowbtn" data-a="openSale" data-id="'+s.id+'"><div class="grow"><div style="font-weight:600">N° '+pad(s.no)+' · '+tstr(s.ts)+(U.rper!=='today'?' · '+dstr(s.ts):'')+'</div><div class="small muted">'+esc(s.custName||'Sans compte')+' · '+(p?esc(p.name):'')+' · '+ROLE[s.role]+'</div></div>'
+    return '<button class="rowbtn" data-a="openSale" data-id="'+s.id+'"><div class="grow"><div style="font-weight:600">N° '+pad(s.no)+' · '+tstr(s.ts)+(U.rper!=='today'?' · '+dstr(s.ts):'')+'</div><div class="small muted">'+esc(s.custName||'Sans compte')+' · '+(p?esc(p.name):'')+' · '+esc(s.sellerName||ROLE[s.role])+'</div></div>'
       +'<div style="text-align:right"><b class="num">'+fmt(s.total)+' FC</b>'+(s.pointsUsed?'<div class="small pts num">payé en points '+fmt(s.pointsUsed)+'</div>':'')+'</div></button>'}).join('')+(list.length>60?'<div class="hint" style="padding-top:10px">60 derniers tickets affichés sur '+list.length+'.</div>':''):'<div class="muted">Aucune vente sur cette période.</div>')+'</div>';
+  if(owner){var can=inPeriod(S.sales.filter(function(x){return x.cancelled}),U.rper);
+    if(can.length)h+='<h2 class="h">Ventes annulées ('+can.length+')</h2><div class="card">'+can.slice(0,30).map(function(x){return '<button class="rowbtn" data-a="openSale" data-id="'+x.id+'"><div class="grow"><div style="font-weight:600">N° '+pad(x.no)+' · '+dstr(x.ts)+' '+tstr(x.ts)+'</div><div class="small muted">'+esc(x.sellerName||'')+' · motif : '+esc(x.cancelled.reason)+'</div></div><b class="num" style="text-decoration:line-through">'+fmt(x.total)+' FC</b></button>'}).join('')+'</div>'}
   return h;
+}
+function sellerList(){
+  var m={};S.users.forEach(function(u){if(u.role==='seller')m[u.id]={id:u.id,name:u.name,pdvId:u.pdvId}});
+  S.sales.forEach(function(x){if(x.sellerId&&x.sellerId!=='u0'&&!m[x.sellerId])m[x.sellerId]={id:x.sellerId,name:x.sellerName||'?',pdvId:x.pdvId,gone:true}});
+  return Object.keys(m).map(function(k){return m[k]});
 }
 function profitDetail(list,title,ca){
   var a=agg(list),owner=U.user.role==='owner';
@@ -966,17 +998,18 @@ function profitDetail(list,title,ca){
     +'<button class="btn primary wide" style="margin-top:12px" data-a="closeModal">Fermer</button>');
 }
 function showTicket(s,fresh){
-  openModal('<h3>'+(fresh?'Vente enregistrée ✓':'Ticket N° '+pad(s.no))+'</h3><div class="paper">'+(brand().logo?'<img src="'+brand().logo+'" alt="Logo" style="display:block;margin:0 auto 8px;width:'+Math.min(100,Math.round((brand().lw||384)/384*100))+'%;height:auto;image-rendering:pixelated">':'')+'<pre>'+esc(ticketLines(s).join('\n'))+'</pre></div>'
+  openModal('<h3>'+(fresh?'Vente enregistrée ✓':'Ticket N° '+pad(s.no))+'</h3>'+(s.cancelled?'<div class="note bad"><b>Vente annulée</b> le '+dstr(s.cancelled.ts)+' à '+tstr(s.cancelled.ts)+' par '+esc(s.cancelled.byName)+'. Motif : '+esc(s.cancelled.reason)+'</div>':'')+'<div class="paper">'+(brand().logo?'<img src="'+brand().logo+'" alt="Logo" style="display:block;margin:0 auto 8px;width:'+Math.min(100,Math.round((brand().lw||384)/384*100))+'%;height:auto;image-rendering:pixelated">':'')+'<pre>'+esc(ticketLines(s).join('\n'))+'</pre></div>'
    +'<p class="hint" style="margin:10px 0 0;text-align:center">Aperçu au format 58 mm (32 colonnes).</p>'
    +'<div class="row" style="margin-top:14px"><button class="btn grow" data-a="copyTicket" data-id="'+s.id+'">Copier</button><button class="btn grow" data-a="printTicket">Imprimer</button></div>'
+   +(U.user&&U.user.role==='owner'&&!fresh&&!s.cancelled?'<button class="btn danger wide" style="margin-top:10px" data-a="cancelAsk" data-id="'+s.id+'">Annuler cette vente</button>':'')
    +'<button class="btn primary wide" style="margin-top:10px" data-a="closeModal">'+(fresh?'Nouvelle vente':'Fermer')+'</button>');
 }
 
 /* gestion (propriétaire) */
-function manageView(){
+function manageGen(){
   var T=terminals(),pend=S.resets.filter(resetActive);
   var E=balance('E'),eled=S.ledger.filter(function(l){return l.acc==='E'}).slice(-5).reverse();
-  var h='<h2 style="font-size:22px;margin-top:18px">Gestion</h2>';
+  var h='';
   h+='<h2 class="h">Positions des terminaux</h2><div class="card">'+mapSVG()
    +'<div style="margin-top:10px">'+T.map(function(t){return '<div class="item"><div class="grow"><div style="font-weight:600">PDV '+esc(t.pdv.name)+' · '+ROLE[t.who]+'</div><div class="small muted num">'+t.last.lat.toFixed(4)+', '+t.last.lng.toFixed(4)+'</div></div><span class="chip">'+ago(t.last.ts)+'</span></div>'}).join('')+'</div>'
    +'<div class="row" style="margin-top:12px"><button class="btn grow" data-a="geoToggle">'+(S.geoEnabled?'Désactiver la géolocalisation':'Activer la géolocalisation')+'</button><button class="btn grow" data-a="pingAll"'+(S.geoEnabled?'':' disabled')+'>Simuler un envoi</button></div>'
@@ -995,20 +1028,131 @@ function manageView(){
    +'<div class="hint" style="margin-top:8px">Le logo est réduit à 384 points de large (58 mm) et converti en noir et blanc pour l’imprimante thermique. Le logo s’imprime en haut du ticket et la devise en bas.</div></div>';
   h+='<h2 class="h">Intrants</h2><div class="card"><label class="lbl" for="mg">Marge d’erreur de consommation (%)</label><div class="row"><input id="mg" class="inp grow" inputmode="decimal" data-i="dn" value="'+String(S.margin).replace('.',',')+'"><button class="btn primary" data-a="saveMargin">Enregistrer</button></div>'
    +'<div class="hint" style="margin-top:6px">Un comptage dont l’écart dépasse cette marge déclenche une alerte.</div></div>';
-  h+='<h2 class="h">Points de vente</h2><div class="card">'+S.pdvs.map(function(p){return '<div class="item"><div class="grow"><b>'+esc(p.name)+'</b><div class="small muted">Vendeur matin · Vendeur soir</div></div></div>'}).join('')
+  h+='<h2 class="h">Points de vente</h2><div class="card">'+S.pdvs.map(function(p){var sl=S.users.filter(function(u){return u.role==='seller'&&u.pdvId===p.id});return '<div class="item"><div class="grow"><b>'+esc(p.name)+'</b><div class="small muted">'+(sl.length?sl.map(function(u){return esc(u.name)}).join(' · '):'Aucun vendeur')+'</div></div><button class="btn sm danger" data-a="delPdv" data-id="'+p.id+'">Supprimer</button></div>'}).join('')
    +'<label class="lbl" for="npdv">Nouveau point de vente</label><div class="row"><input id="npdv" class="inp grow" placeholder="Nom du point de vente"><button class="btn primary" data-a="addPdv">Ajouter</button></div></div>';
   h+='<h2 class="h">Démonstration</h2><div class="card"><div class="note">Les cartes QR pour les clients seront ajoutées plus tard.</div><button class="btn wide'+(U.confirmReset?' danger':'')+'" style="margin-top:10px" data-a="resetDemo">'+(U.confirmReset?'Confirmer : effacer mes essais':'Remettre les données de démonstration')+'</button></div>';
   return h;
 }
 
+
+/* ---------- comptes et caisse ---------- */
+function whoName(u){return u.role==='owner'?'Propriétaire':u.name}
+function logEv(type,txt){S.log.unshift({ts:Date.now(),uid:U.user?U.user.id:null,name:U.user?whoName(U.user):'Système',pdvId:U.user?U.user.pdvId:null,type:type,txt:txt});if(S.log.length>600)S.log.length=600}
+function userById(id){return S.users.find(function(u){return u.id===id})||null}
+function openShift(uid){return S.shifts.find(function(h){return h.uid===uid&&h.state==='open'})||null}
+function shiftEnd(h){return h.closeTs||Date.now()}
+function shiftSales(h){return live(S.sales).filter(function(x){return x.sellerId===h.uid&&x.ts>=h.openTs&&x.ts<=shiftEnd(h)})}
+function shiftWd(h){return S.withdrawals.filter(function(w){return w.pdvId===h.pdvId&&w.ts>=h.openTs&&w.ts<=shiftEnd(h)})}
+function expectedCash(h){var c=h.float;shiftSales(h).forEach(function(x){c+=x.cashNet});shiftWd(h).forEach(function(w){c-=w.amount});return r2(c)}
+function suggestedFloat(pdv){
+  var f=S.floats[pdv],last=S.shifts.filter(function(h){return h.pdvId===pdv&&h.state==='closed'}).sort(function(a,b){return b.closeTs-a.closeTs})[0];
+  var since=last?last.closeTs:0;
+  if(f&&f.ts>=since)return f.amount;
+  var base=last?(last.counted!=null?last.counted:last.expected):0,w=0;
+  S.withdrawals.forEach(function(x){if(x.pdvId===pdv&&x.ts>since)w+=x.amount});
+  return Math.max(0,r2(base-w));
+}
+function openCashView(){
+  var u=U.user,pd=pdvById(u.pdvId),sg=suggestedFloat(u.pdvId);
+  return '<h2 style="font-size:22px;margin-top:18px">Ouverture de caisse</h2><div class="card">'
+   +'<p class="muted" style="margin:0 0 12px">PDV '+esc(pd?pd.name:'')+' · '+esc(u.name)+'. Comptez l’argent laissé dans la caisse avant de commencer à vendre.</p>'
+   +'<div class="kpi"><div class="k">Fond de caisse prévu</div><div class="v">'+fmt(sg)+' FC</div></div>'
+   +'<button class="btn primary big wide" style="margin-top:14px" data-a="openCashOk">Je confirme : '+fmt(sg)+' FC</button>'
+   +'<label class="lbl" for="ofl">Le montant compté est différent ?</label><div class="row"><input id="ofl" class="inp grow" inputmode="decimal" data-i="dn" placeholder="Montant (FC)"><button class="btn" data-a="openCashDiff">Valider ce montant</button></div>'
+   +'<div class="hint" style="margin-top:8px">Un montant différent du montant prévu est signalé au propriétaire.</div></div>';
+}
+function startShift(amount){
+  var u=U.user,sg=suggestedFloat(u.pdvId);
+  S.shifts.push({id:'h'+(++S.seq),uid:u.id,name:u.name,pdvId:u.pdvId,openTs:Date.now(),float:amount,suggested:sg,state:'open'});
+  logEv('shift_open','Ouverture de caisse : '+fmt(amount)+' FC'+(amount!==sg?' (prévu '+fmt(sg)+' FC)':''));
+  save();render();
+}
+function cashView(){
+  var u=U.user,h=openShift(u.id);
+  var out='<h2 style="font-size:22px;margin-top:18px">Caisse</h2>';
+  if(!h)return out+'<div class="note">Aucun service ouvert.</div>';
+  var ss=shiftSales(h),tot=ss.reduce(function(a,x){return a+x.total},0);
+  out+='<div class="card"><div class="item"><div class="grow muted">Service ouvert à</div><b>'+tstr(h.openTs)+'</b></div>'
+   +'<div class="item"><div class="grow muted">Fond de caisse de départ</div><b class="num">'+fmt(h.float)+' FC</b></div>'
+   +'<div class="item"><div class="grow muted">Tickets de ce service</div><b class="num">'+ss.length+'</b></div>'
+   +'<div class="item"><div class="grow muted">Ventes de ce service</div><b class="num">'+fmt(tot)+' FC</b></div></div>'
+   +'<button class="btn primary big wide" style="margin-top:14px" data-a="closeCash">Clôturer ma caisse</button>'
+   +'<p class="hint" style="margin:8px 2px 0">À la fin de votre service, comptez l’argent de la caisse (fond de caisse compris) et saisissez le total. Vous serez ensuite déconnecté.</p>';
+  var mine=S.shifts.filter(function(x){return x.uid===u.id&&x.state==='closed'}).sort(function(a,b){return b.closeTs-a.closeTs}).slice(0,5);
+  if(mine.length)out+='<h2 class="h">Mes dernières clôtures</h2><div class="card">'+mine.map(shiftRow).join('')+'</div>';
+  return out;
+}
+function shiftRow(h){
+  var d=h.diff,chip=h.forced?'<span class="chip">Clôturé par le propriétaire</span>':(d===0?'<span class="chip good">Caisse juste</span>':'<span class="chip bad">'+(d>0?'Excédent +':'Manque ')+fmt(Math.abs(d))+' FC</span>');
+  return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(h.name)+'</div><div class="small muted">'+dstr(h.openTs)+' · '+tstr(h.openTs)+' → '+tstr(h.closeTs)+'</div>'
+   +'<div class="small num muted">Attendu '+fmt(h.expected)+' · Compté '+(h.counted==null?'—':fmt(h.counted))+(h.float!==h.suggested?' · fond déclaré '+fmt(h.float)+' (prévu '+fmt(h.suggested)+')':'')+'</div></div>'+chip+'</div>';
+}
+function finishShift(h,counted,forced){
+  h.closeTs=Date.now();h.expected=expectedCash(h);h.counted=forced?null:counted;h.diff=forced?null:r2(counted-h.expected);h.forced=!!forced;h.state='closed';
+  logEv('shift_close','Clôture de caisse de '+h.name+' : attendu '+fmt(h.expected)+' FC'+(forced?' (clôture forcée)':', compté '+fmt(counted)+' FC, écart '+fmt(h.diff)+' FC'));
+}
+function cashAdminView(){
+  var open=S.shifts.filter(function(h){return h.state==='open'});
+  var h='<h2 class="h">Services en cours</h2><div class="card">'+(open.length?open.map(function(x){var pd=pdvById(x.pdvId),ss=shiftSales(x);
+    return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(x.name)+'</div><div class="small muted">PDV '+esc(pd?pd.name:'')+' · depuis '+tstr(x.openTs)+' · '+ss.length+' ticket(s)</div><div class="small num muted">Fond '+fmt(x.float)+' · attendu en caisse '+fmt(expectedCash(x))+' FC</div></div><button class="btn sm danger" data-a="forceClose" data-id="'+x.id+'">Clôturer</button></div>'}).join(''):'<div class="muted">Aucun vendeur en service.</div>')+'</div>';
+  h+='<h2 class="h">Fond de caisse</h2><div class="card">'+S.pdvs.map(function(pd){return '<div class="item"><div class="grow">PDV '+esc(pd.name)+'</div><b class="num">'+fmt(suggestedFloat(pd.id))+' FC</b></div>'}).join('')
+   +'<div class="hint" style="margin:6px 0">Montant prévu pour le prochain vendeur : ce que le vendeur précédent a compté, moins vos retraits. Vous pouvez le fixer vous-même.</div>'
+   +pdvSelect('fpd',S.pdvs[0]&&S.pdvs[0].id)+'<label class="lbl" for="ffa">Nouveau fond de caisse (FC)</label><div class="row"><input id="ffa" class="inp grow" inputmode="decimal" data-i="dn"><button class="btn primary" data-a="setFloat">Définir</button></div></div>';
+  var wd=S.withdrawals.slice(0,5);
+  h+='<h2 class="h">Retrait d’argent</h2><div class="card">'+pdvSelect('wpd',S.pdvs[0]&&S.pdvs[0].id)+'<label class="lbl" for="wam">Montant retiré (FC)</label><input id="wam" class="inp" inputmode="decimal" data-i="dn"><label class="lbl" for="wno">Note (facultatif)</label><input id="wno" class="inp" maxlength="60">'
+   +'<button class="btn primary wide" style="margin-top:12px" data-a="addWithdraw">Enregistrer le retrait</button>'
+   +(wd.length?'<div style="margin-top:10px">'+wd.map(function(w){var pd=pdvById(w.pdvId);return '<div class="item"><div class="grow small">PDV '+esc(pd?pd.name:'')+' · '+dstr(w.ts)+' '+tstr(w.ts)+(w.note?'<div class="muted">'+esc(w.note)+'</div>':'')+'</div><b class="num">−'+fmt(w.amount)+' FC</b></div>'}).join('')+'</div>':'')+'</div>';
+  var cl=S.shifts.filter(function(x){return x.state==='closed'}).sort(function(a,b){return b.closeTs-a.closeTs});
+  var gap={};cl.forEach(function(x){if(x.diff!=null&&Date.now()-x.closeTs<30*864e5){gap[x.name]=(gap[x.name]||0)+x.diff}});
+  var gk=Object.keys(gap);
+  h+='<h2 class="h">Écarts sur 30 jours</h2><div class="card">'+(gk.length?gk.map(function(k){var v=r2(gap[k]);return '<div class="item"><div class="grow">'+esc(k)+'</div><b class="num '+(v<0?'bad':v>0?'pts':'good')+'">'+(v>0?'+':'')+fmt(v)+' FC</b></div>'}).join(''):'<div class="muted">Aucune clôture.</div>')+'</div>';
+  h+='<h2 class="h">Dernières clôtures</h2><div class="card">'+(cl.length?cl.slice(0,15).map(shiftRow).join(''):'<div class="muted">Aucune clôture pour le moment.</div>')+'</div>';
+  return h;
+}
+function staffView(){
+  var h='<h2 class="h">Comptes des vendeurs</h2>';
+  S.pdvs.forEach(function(pd){
+    var us=S.users.filter(function(u){return u.role==='seller'&&u.pdvId===pd.id});
+    h+='<div class="card" style="margin-top:12px"><div class="sub-h" style="margin-top:0">PDV '+esc(pd.name)+'</div>'+(us.length?us.map(function(u){var sh=openShift(u.id);
+      return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(u.name)+'</div><div class="small muted num">'+esc(u.phone)+' · '+(u.shift==='matin'?'matin':'soir')+'</div><div class="small '+(sh?'good':'muted')+'">'+(sh?'Service ouvert depuis '+tstr(sh.openTs):'Hors service')+'</div></div><div class="stack"><button class="btn sm" data-a="pwSeller" data-id="'+u.id+'">Mot de passe</button><button class="btn sm danger" data-a="delSeller" data-id="'+u.id+'">Supprimer</button></div></div>'}).join(''):'<div class="muted">Aucun vendeur.</div>')+'</div>';
+  });
+  h+='<h2 class="h">Créer un compte vendeur</h2><div class="card"><label class="lbl" for="nsn">Nom</label><input id="nsn" class="inp" maxlength="40">'
+   +'<label class="lbl" for="nsp">Numéro de téléphone (identifiant)</label><input id="nsp" class="inp" inputmode="tel">'
+   +'<label class="lbl" for="nspw">Mot de passe (6 caractères minimum)</label><input id="nspw" class="inp" autocomplete="off">'
+   +pdvSelect('nspd',S.pdvs[0]&&S.pdvs[0].id)+'<label class="lbl" for="nssh">Poste</label><select id="nssh" class="sel"><option value="matin">Matin</option><option value="soir">Soir</option></select>'
+   +'<button class="btn primary wide" style="margin-top:14px" data-a="addSeller">Créer le compte</button>'
+   +'<div class="hint" style="margin-top:8px">Seul le propriétaire crée, modifie ou supprime les comptes. Le vendeur se connecte avec ce numéro et ce mot de passe.</div></div>';
+  return h;
+}
+function logView(){
+  var L=S.log.slice(0,80);
+  return '<h2 class="h">Journal d’activité</h2><div class="card">'+(L.length?L.map(function(e){return '<div class="item" style="align-items:flex-start"><div class="grow"><div class="small"><b>'+esc(e.name)+'</b> · '+esc(e.txt)+'</div><div class="small muted">'+dstr(e.ts)+' '+tstr(e.ts)+'</div></div></div>'}).join(''):'<div class="muted">Aucun événement.</div>')
+   +'</div><p class="hint" style="margin:8px 2px 0">Les 80 derniers événements : connexions, ventes, annulations, caisse, prix, stocks, comptes. Les vendeurs ne peuvent ni les voir ni les effacer.</p>';
+}
+function manageView(){
+  var t=U.mg||'gen';
+  var seg=[['gen','Général'],['staff','Vendeurs'],['cash','Caisse'],['log','Journal']].map(function(x){return '<button data-a="mgtab" data-v="'+x[0]+'" aria-pressed="'+(t===x[0])+'">'+x[1]+'</button>'}).join('');
+  return '<h2 style="font-size:22px;margin-top:18px">Gestion</h2><div class="seg" style="margin-top:10px">'+seg+'</div>'+({gen:manageGen,staff:staffView,cash:cashAdminView,log:logView}[t])();
+}
+function startSession(u,silent){
+  U.user={id:u.id,name:u.name,role:u.role==='owner'?'owner':u.shift,pdvId:u.role==='owner'?(U.lpdv||S.pdvs[0].id):u.pdvId};
+  S.session={uid:u.id,pdvId:U.user.pdvId};U.tab='sale';U.spdv=null;resetSale();
+  if(!silent){logEv('login','Connexion');ping()}
+  save();render();window.scrollTo(0,0);
+}
+function logoutNow(){if(U.user)logEv('logout','Déconnexion');U.user=null;S.session=null;resetSale();save();render()}
+var OWNER_ONLY={newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1};
+
 /* rendu général */
 function tabView(){
-  return {sale:saleView,clients:clientsView,products:productsView,stock:stockView,reports:reportsView,manage:manageView}[U.tab]();
+  return {sale:saleView,clients:clientsView,products:productsView,stock:stockView,reports:reportsView,manage:manageView,cash:cashView}[U.tab]();
 }
 function render(){
   var app=$('#app'),dock=$('#dock');
   if(!U.user){app.innerHTML=viewLogin();dock.hidden=true;return}
   if(U.tab==='manage'&&U.user.role!=='owner')U.tab='sale';
+  if(U.tab==='cash'&&U.user.role==='owner')U.tab='sale';
+  if(U.user.role!=='owner'&&!openShift(U.user.id)){app.innerHTML='<div class="shell">'+topbar()+'<main class="main">'+openCashView()+'</main></div>';dock.hidden=true;return}
   app.innerHTML='<div class="shell">'+topbar()+'<main class="main">'+tabView()+'</main></div>';
   dock.hidden=false;$('#nav').innerHTML=navHTML();
   $('#actionBar').innerHTML=U.tab==='sale'?actionHTML():'';
@@ -1017,9 +1161,64 @@ function render(){
 
 /* ---------- actions ---------- */
 var A={
-  lrole:function(d){U.lrole=d.v;render()},
-  login:function(){U.user={role:U.lrole,pdvId:U.lpdv||S.pdvs[0].id};U.tab='sale';U.spdv=null;resetSale();ping();render();window.scrollTo(0,0)},
-  logout:function(){U.user=null;resetSale();render()},
+  login:function(){
+    var ph=digits(($('#lph')||{}).value),pw=($('#lpw')||{}).value||'',f=U.fails[ph]||{n:0,until:0};
+    if(Date.now()<f.until){toast('Trop d’essais. Réessayez dans '+Math.ceil((f.until-Date.now())/60000)+' min.');return}
+    var u=S.users.find(function(x){return x.phone===ph});
+    if(!u||u.pw!==hashPw(pw,u.id)){f.n++;if(f.n>=5){f.until=Date.now()+300000;f.n=0}U.fails[ph]=f;toast('Numéro ou mot de passe incorrect.');return}
+    U.fails[ph]=null;startSession(u);
+  },
+  logout:function(){var u=U.user;if(u&&u.role!=='owner'&&openShift(u.id)){A.closeCash();return}logoutNow()},
+  mgtab:function(d){U.mg=d.v;render()},
+  openCashOk:function(){startShift(suggestedFloat(U.user.pdvId))},
+  openCashDiff:function(){var v=num('ofl');if(isNaN(v)||v<0){toast('Saisissez le montant compté.');return}startShift(v)},
+  closeCash:function(){openModal('<h3>Clôture de caisse</h3><p class="muted" style="margin:0 0 10px">Comptez tout l’argent présent dans la caisse, fond de caisse compris, et saisissez le total. Vous ne pouvez pas vendre après la clôture.</p><label class="lbl" for="ccn">Montant compté (FC)</label><input id="ccn" class="inp" inputmode="decimal" data-i="dn" autofocus><div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="confirmClose">Valider la clôture</button></div>')},
+  confirmClose:function(){
+    var v=num('ccn'),u=U.user,h=u&&openShift(u.id);if(!h)return;
+    if(isNaN(v)||v<0){toast('Saisissez le montant compté.');return}
+    finishShift(h,v,false);var nm=u.name;logoutNow();
+    var st=h.diff===0?'good':'bad';
+    openModal('<h3>Caisse clôturée</h3><div class="note '+st+'"><b>'+(h.diff===0?'Caisse juste ✓':h.diff<0?'Manque de '+fmt(-h.diff)+' FC':'Excédent de '+fmt(h.diff)+' FC')+'</b></div>'
+      +'<div class="card" style="margin-top:12px"><div class="item"><div class="grow muted">Attendu en caisse</div><b class="num">'+fmt(h.expected)+' FC</b></div><div class="item"><div class="grow muted">Compté</div><b class="num">'+fmt(h.counted)+' FC</b></div></div>'
+      +'<p class="hint">Merci, '+esc(nm)+'. Vous êtes déconnecté. Le vendeur suivant peut ouvrir sa session.</p><button class="btn primary wide" data-a="closeModal">Terminé</button>');
+  },
+  forceClose:function(d){var h=S.shifts.find(function(x){return x.id===d.id&&x.state==='open'});if(!h)return;finishShift(h,null,true);save();render();toast('Service clôturé.')},
+  setFloat:function(){var v=num('ffa'),pdv=$('#fpd').value;if(isNaN(v)||v<0){toast('Saisissez un montant.');return}
+    S.floats[pdv]={amount:v,ts:Date.now(),by:U.user.id};var pd=pdvById(pdv);logEv('float','Fond de caisse fixé à '+fmt(v)+' FC (PDV '+(pd?pd.name:'?')+')');save();render();toast('Fond de caisse enregistré.')},
+  addWithdraw:function(){var v=num('wam'),pdv=$('#wpd').value;if(isNaN(v)||!(v>0)){toast('Saisissez le montant retiré.');return}
+    S.withdrawals.unshift({id:'w'+(++S.seq),pdvId:pdv,ts:Date.now(),amount:v,note:$('#wno').value.trim(),by:U.user.id});var pd=pdvById(pdv);logEv('withdraw','Retrait de '+fmt(v)+' FC (PDV '+(pd?pd.name:'?')+')');save();render();toast('Retrait enregistré.')},
+  addSeller:function(){
+    var nm=$('#nsn').value.trim(),ph=digits($('#nsp').value),pw=$('#nspw').value,pdv=$('#nspd').value,sh=$('#nssh').value;
+    if(!nm){toast('Saisissez le nom du vendeur.');return}
+    if(ph.length<9){toast('Numéro de téléphone trop court.');return}
+    if(pw.length<6){toast('Mot de passe : 6 caractères minimum.');return}
+    if(S.users.some(function(x){return x.phone===ph})){toast('Ce numéro a déjà un compte.');return}
+    var id='u'+(++S.seq);S.users.push({id:id,name:nm,phone:ph,pw:hashPw(pw,id),role:'seller',shift:sh,pdvId:pdv});
+    logEv('seller_new','Compte vendeur créé : '+nm+' ('+ph+')');save();render();toast('Compte créé.')},
+  delSeller:function(d,e){var u=userById(d.id);if(!u)return;var btn=e.target.closest('button');
+    if(openShift(u.id)){toast('Clôturez d’abord son service (bouton Clôturer dans Caisse).');return}
+    if(!btn.dataset.ok){btn.dataset.ok='1';btn.textContent='Confirmer';return}
+    S.users=S.users.filter(function(x){return x.id!==u.id});logEv('seller_del','Compte vendeur supprimé : '+u.name);save();render();toast('Compte supprimé.')},
+  pwSeller:function(d){var u=userById(d.id);if(!u)return;openModal('<h3>Nouveau mot de passe</h3><p class="muted" style="margin:0 0 10px">'+esc(u.name)+'</p><label class="lbl" for="npw">Mot de passe (6 caractères minimum)</label><input id="npw" class="inp" autocomplete="off"><div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="pwDo" data-id="'+u.id+'">Enregistrer</button></div>')},
+  pwDo:function(d){var u=userById(d.id),pw=$('#npw').value;if(!u)return;if(pw.length<6){toast('6 caractères minimum.');return}u.pw=hashPw(pw,u.id);logEv('seller_pw','Mot de passe changé : '+u.name);save();closeModal();toast('Mot de passe modifié.')},
+  delPdv:function(d,e){var pd=pdvById(d.id),btn=e.target.closest('button');if(!pd)return;
+    if(S.pdvs.length<=1){toast('Il faut garder au moins un point de vente.');return}
+    if(S.users.some(function(u){return u.role==='seller'&&u.pdvId===pd.id})){toast('Supprimez d’abord les vendeurs de ce point de vente.');return}
+    if(!btn.dataset.ok){btn.dataset.ok='1';btn.textContent='Confirmer';return}
+    S.pdvs=S.pdvs.filter(function(x){return x.id!==pd.id});if(U.rpdv===pd.id)U.rpdv='all';U.spdv=null;if(U.user&&U.user.pdvId===pd.id)U.user.pdvId=S.pdvs[0].id;
+    logEv('pdv_del','Point de vente supprimé : '+pd.name);save();render();toast('Point de vente supprimé.')},
+  cancelAsk:function(d){var s0=S.sales.find(function(x){return x.id===d.id});if(!s0||s0.cancelled)return;
+    openModal('<h3>Annuler le ticket N° '+pad(s0.no)+'</h3><div class="note bad">La vente sort des rapports et des bénéfices. Le stock et les intrants sont remis, les points du client sont rétablis. Si des points gagnés ont déjà été dépensés, le solde du client peut devenir négatif.</div><label class="lbl" for="crs">Motif (obligatoire)</label><input id="crs" class="inp" maxlength="80"><div class="row" style="margin-top:14px"><button class="btn grow" data-a="openSale" data-id="'+s0.id+'">Retour</button><button class="btn danger grow" data-a="cancelDo" data-id="'+s0.id+'">Confirmer</button></div>')},
+  cancelDo:function(d){
+    var s0=S.sales.find(function(x){return x.id===d.id});if(!s0||s0.cancelled)return;
+    var why=$('#crs').value.trim();if(why.length<3){toast('Indiquez le motif de l’annulation.');return}
+    S.ledger.filter(function(l){return l.saleId===s0.id&&l.type!=='cancel'}).forEach(function(l){addLedger(l.acc,'cancel',-l.pts,'Annulation du ticket N° '+pad(s0.no),s0.id);S.ledger[S.ledger.length-1].of=l.type});
+    (s0.items||[]).forEach(function(it){var pr=prodById(it.id);if(pr&&st(pr,s0.pdvId)!==null)pr.stock[s0.pdvId]=st(pr,s0.pdvId)+it.qty;
+      (it.use||[]).forEach(function(u){var g=ingById(u.ing);if(!g)return;var q=ist(g,s0.pdvId);if(!q)return;q.cur=r6(q.cur+it.qty*u.q);q.used=r6(Math.max(0,q.used-it.qty*u.q))})});
+    s0.cancelled={ts:Date.now(),by:U.user.id,byName:whoName(U.user),reason:why};
+    logEv('cancel','Ticket N° '+pad(s0.no)+' annulé ('+fmt(s0.total)+' FC) : '+why);save();render();showTicket(s0,false);toast('Vente annulée.')},
+  sdetail:function(d){var sl=sellerList().find(function(x){return x.id===d.id});profitDetail(inPeriod(live(S.sales),U.rper).filter(function(x){return x.sellerId===d.id}),(sl?sl.name:'Vendeur')+' — '+PERLAB[U.rper],true)},
+  pvdetail:function(d){var pd=pdvById(d.id);profitDetail(inPeriod(live(S.sales),U.rper).filter(function(x){return x.pdvId===d.id}),'PDV '+(pd?pd.name:'?')+' — '+PERLAB[U.rper],true)},
   tab:function(d){U.tab=d.v;render();window.scrollTo(0,0)},
   closeModal:closeModal,
   addp:function(d){var p=prodById(d.id);if(!p||!canAdd(d.id))return;
@@ -1067,7 +1266,7 @@ var A={
     if(resetOf(d.id)){toast('Une demande est déjà en cours pour ce client.');return}
     S.resets.push({id:'q'+(++S.seq),custId:d.id,ts:Date.now(),status:'pending',pdvId:U.user.pdvId});save();closeModal();toast('Demande envoyée au propriétaire.')},
   resetOwner:function(d){closeModal();resetPinFlow(d.id,null)},
-  approveReset:function(d){var r=S.resets.find(function(x){return x.id===d.id});if(r&&r.status==='pending'){r.status='approved';r.approvedAt=Date.now();save();render();toast('Réinitialisation autorisée pour 30 minutes.')}},
+  approveReset:function(d){var r=S.resets.find(function(x){return x.id===d.id});if(r&&r.status==='pending'){r.status='approved';r.approvedAt=Date.now();logEv('reset','Réinitialisation de code autorisée');save();render();toast('Réinitialisation autorisée pour 30 minutes.')}},
   rejectReset:function(d){var r=S.resets.find(function(x){return x.id===d.id});if(r&&resetActive(r)){r.status='rejected';save();render();toast('Demande refusée.')}},
   doReset:function(d){var r=S.resets.find(function(x){return x.id===d.id});if(!r||r.status!=='approved'||!resetActive(r)){toast('Autorisation expirée ou absente.');closeModal();render();return}closeModal();resetPinFlow(r.custId,r.id)},
   /* produits */
@@ -1096,15 +1295,17 @@ var A={
     var recipe=[];
     M.recipe.forEach(function(r){var v=parseDec(r.g);if(!(v>0))return;
       if(r.mode==='l')recipe.push({ing:r.ing,mode:'l',raw:v,g:r6(v/N)});else recipe.push({ing:r.ing,mode:'u',raw:v,g:r6(v)})});
-    if(d.id){var p=prodById(d.id);Object.assign(p,{name:name,price:price,cost:cost,b:b,p1:p1,p2:p2,recipe:recipe});if(usesLot)p.batch=N;else delete p.batch}
+    if(d.id){var p=prodById(d.id);var oldP=p.price;Object.assign(p,{name:name,price:price,cost:cost,b:b,p1:p1,p2:p2,recipe:recipe});if(usesLot)p.batch=N;else delete p.batch}
     else{
       var stock={};S.pdvs.forEach(function(pd){var v=num('st_'+pd.id);if(!isNaN(v))stock[pd.id]=Math.round(v)});
       var np={id:'r'+(++S.seq),name:name,price:price,cost:cost,b:b,p1:p1,p2:p2,stock:stock,recipe:recipe};if(usesLot)np.batch=N;S.products.push(np);
     }
+    logEv('product',(d.id?'Produit modifié : ':'Produit créé : ')+name+' · prix '+fmt(price)+' FC'+(d.id&&oldP!==price?' (avant : '+fmt(oldP)+' FC)':''));
     save();closeModal();toast('Produit enregistré.');render();
   },
   delProd:function(d,e){var btn=e.target.closest('button');
     if(!btn.dataset.ok){btn.dataset.ok='1';btn.textContent='Confirmer la suppression';return}
+    var dp=prodById(d.id);if(dp)logEv('product','Produit supprimé : '+dp.name);
     S.products=S.products.filter(function(p){return p.id!==d.id});U.cart=U.cart.filter(function(i){return i.id!==d.id});save();closeModal();render()},
   /* stock */
   addStock:function(d){openModal(stockAddHTML(d.kind,d.id))},
@@ -1114,7 +1315,7 @@ var A={
     if(!(q>0)){toast('Saisissez une quantité supérieure à 0.');return}
     if(d.kind==='p'){var p=prodById(d.id);p.stock=p.stock||{};p.stock[pdv]=(p.stock[pdv]||0)+q}
     else{var s=ensureIng(ingById(d.id),pdv);s.cur=r6(s.cur+q);s.added=r6(s.added+q)}
-    S.moves.unshift({ts:Date.now(),kind:d.kind,id:d.id,pdv:pdv,qty:q});S.moves=S.moves.slice(0,30);save();closeModal();toast('Stock ajouté.');render();
+    var mo=d.kind==='p'?prodById(d.id):ingById(d.id);logEv('stock','Stock ajouté : '+(mo?mo.name:'?')+' +'+q);S.moves.unshift({ts:Date.now(),kind:d.kind,id:d.id,pdv:pdv,qty:q});S.moves=S.moves.slice(0,30);save();closeModal();toast('Stock ajouté.');render();
   },
   newIng:function(){openModal(newIngHTML())},
   saveIng:function(){
@@ -1130,7 +1331,7 @@ var A={
     if(isNaN(cnt)){toast('Saisissez la quantité comptée.');return}
     var s=ensureIng(g,pdv),theo=s.used,actual=s.open+s.added-cnt,dev=actual-theo;
     var pct=theo>0?dev/theo*100:(dev===0?0:100),ok=Math.abs(pct)<=S.margin;
-    S.counts.unshift({id:'k'+(++S.seq),ts:Date.now(),ingId:g.id,pdvId:pdv,theo:theo,actual:actual,pct:pct,ok:ok});S.counts=S.counts.slice(0,40);
+    logEv('count','Comptage de '+g.name+' : écart '+dec(pct)+' %');S.counts.unshift({id:'k'+(++S.seq),ts:Date.now(),ingId:g.id,pdvId:pdv,theo:theo,actual:actual,pct:pct,ok:ok});S.counts=S.counts.slice(0,40);
     s.open=cnt;s.cur=cnt;s.added=0;s.used=0;save();
     $('.sheet').innerHTML='<h3>Résultat du comptage</h3><div class="note '+(ok?'good':'bad')+'"><b>'+(ok?'Dans la marge':'Hors marge')+'</b> · écart '+(pct>0?'+':'')+dec(pct)+' % (marge acceptée : '+S.margin+' %)</div>'
       +'<div class="card" style="margin-top:12px"><div class="item"><div class="grow muted">Consommation prévue par les ventes</div><b class="num">'+qf(g,theo)+'</b></div>'
@@ -1171,10 +1372,10 @@ var A={
   geoToggle:function(){S.geoEnabled=!S.geoEnabled;save();render()},
   pingAll:function(){S.pdvs.forEach(function(p){ping(p.id,'matin')});toast('Positions simulées envoyées.');render()},
   addPdv:function(){var v=$('#npdv').value.trim();if(!v){toast('Saisissez le nom du point de vente.');return}
-    S.pdvs.push({id:'p'+(++S.seq),name:v,lat:-4.325+(Math.random()-.5)*0.05,lng:15.31+(Math.random()-.5)*0.06});save();render()},
+    logEv('pdv_new','Point de vente créé : '+v);S.pdvs.push({id:'p'+(++S.seq),name:v,lat:-4.325+(Math.random()-.5)*0.05,lng:15.31+(Math.random()-.5)*0.06});save();render()},
   resetDemo:function(){
     if(!U.confirmReset){U.confirmReset=true;render();return}
-    S=seed();save();U.confirmReset=false;resetSale();U.tab='manage';render();toast('Données de démonstration rétablies.')}
+    S=seed();ensureAccounts(S);S.session={uid:U.user.id,pdvId:U.user.pdvId};save();U.confirmReset=false;resetSale();U.tab='manage';render();toast('Données de démonstration rétablies.')}
 };
 function resetPinFlow(custId,reqId){
   var c=custById(custId);if(!c)return;
@@ -1186,6 +1387,7 @@ function resetPinFlow(custId,reqId){
 /* ---------- écouteurs ---------- */
 document.addEventListener('click',function(e){
   var b=e.target.closest('[data-a]');if(!b)return;
+  if(OWNER_ONLY[b.dataset.a]&&!(U.user&&U.user.role==='owner')){toast('Réservé au propriétaire.');return}
   var f=A[b.dataset.a];if(f)f(b.dataset,e);
 });
 var I={
@@ -1226,6 +1428,7 @@ window.addEventListener('online',function(){setOnline(true)});
 window.addEventListener('offline',function(){setOnline(false)});
 
 mergeDuplicates();
+(function(){var se=S.session,u=se&&userById(se.uid);if(u){U.lpdv=se.pdvId;startSession(u,true)}else S.session=null})();
 render();
 })();
 </script>
