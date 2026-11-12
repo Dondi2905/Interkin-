@@ -1017,6 +1017,7 @@ function showTicket(s,fresh){
 }
 
 /* gestion (propriétaire) */
+function clientLink(){try{return new URL('solde.html',location.href).href}catch(e){return 'solde.html'}}
 function manageGen(){
   var T=terminals(),pend=S.resets.filter(resetActive);
   var E=balance('E'),eled=S.ledger.filter(function(l){return l.acc==='E'}).slice(-5).reverse();
@@ -1041,6 +1042,7 @@ function manageGen(){
    +'<div class="hint" style="margin-top:6px">Un comptage dont l’écart dépasse cette marge déclenche une alerte.</div></div>';
   h+='<h2 class="h">Points de vente</h2><div class="card">'+S.pdvs.map(function(p){var sl=S.users.filter(function(u){return u.role==='seller'&&u.pdvId===p.id});return '<div class="item"><div class="grow"><b>'+esc(p.name)+'</b><div class="small muted">'+(sl.length?sl.map(function(u){return esc(u.name)}).join(' · '):'Aucun vendeur')+'</div></div><button class="btn sm danger" data-a="delPdv" data-id="'+p.id+'">Supprimer</button></div>'}).join('')
    +'<label class="lbl" for="npdv">Nouveau point de vente</label><div class="row"><input id="npdv" class="inp grow" placeholder="Nom du point de vente"><button class="btn primary" data-a="addPdv">Ajouter</button></div></div>';
+  if(SYNC_ON)h+='<h2 class="h">Page client</h2><div class="card"><div class="hint" style="margin:0 0 8px">Vos clients consultent leur solde sur ce lien avec leur numéro et leur code secret.</div><input id="clink" class="inp" readonly value="'+esc(clientLink())+'"><button class="btn wide" style="margin-top:10px" data-a="copyLink">Copier le lien</button></div>';
   if(SYNC_ON)h+='<h2 class="h">Synchronisation</h2><div class="card">'+Sync.statusHTML()+'<button class="btn wide" style="margin-top:10px" data-a="syncNow">Synchroniser maintenant</button></div>';
   else h+='<h2 class="h">Démonstration</h2><div class="card"><div class="note">Les cartes QR pour les clients seront ajoutées plus tard.</div><button class="btn wide'+(U.confirmReset?' danger':'')+'" style="margin-top:10px" data-a="resetDemo">'+(U.confirmReset?'Confirmer : effacer mes essais':'Remettre les données de démonstration')+'</button></div>';
   return h;
@@ -1240,6 +1242,8 @@ var A={
     var old=u.phone;
     if(SYNC_ON){Sync.rpc('change_phone',{p_id:u.id,p_phone:ph}).then(function(){if(U.user&&u.id===U.user.id)Sync.renamePhone(old,ph);logEv('phone','Numéro modifié : '+u.name);save();return Sync.profiles()}).then(function(){closeModal();render();toast('Numéro modifié.')}).catch(function(er){toast(Sync.msg(er),'bad')});return}
     u.phone=ph;logEv('phone','Numéro modifié : '+u.name);save();closeModal();render();toast('Numéro modifié.')},
+  copyLink:function(){var i=$('clink');if(!i)return;var ok=function(){toast('Lien copié.')};
+    try{navigator.clipboard.writeText(i.value).then(ok,function(){i.select();document.execCommand('copy');ok()})}catch(e){i.select();try{document.execCommand('copy')}catch(e2){}ok()}},
   syncNow:function(){if(!SYNC_ON)return;toast('Synchronisation…');Sync.cycle().then(function(){render()})},
   pwSeller:function(d){var u=userById(d.id);if(!u)return;openModal('<h3>Nouveau mot de passe</h3><p class="muted" style="margin:0 0 10px">'+esc(u.role==='owner'?'Compte propriétaire':u.name)+'</p><label class="lbl" for="npw">Mot de passe (6 caractères minimum)</label>'+pwField('npw')+'<div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="pwDo" data-id="'+u.id+'">Enregistrer</button></div>')},
   pwDo:function(d){var u=userById(d.id),pw=$('#npw').value;if(!u)return;if(pw.length<6){toast('6 caractères minimum.');return}
@@ -1302,7 +1306,7 @@ var A={
     if(S.customers.some(function(c){return digits(c.phone).slice(-9)===digits(phone).slice(-9)})){toast('Ce numéro est déjà enregistré.');return}
     if(!M.pin){toast('Le code secret du client est obligatoire.');return}
     var id='c'+nid();
-    S.customers.push({id:id,name:name,phone:phone,sponsorId:M.sp||null,pin:hashPin(M.pin,id),createdAt:Date.now()});save();
+    S.customers.push({id:id,name:name,phone:phone,sponsorId:M.sp||null,pin:hashPin(M.pin,id),createdAt:Date.now()});if(SYNC_ON)Sync.setPin(id,M.pin);save();
     closeModal();toast('Client enregistré : '+name);
     if(U.tab==='sale'){U.client=id;U.usePoints=false;U.unlocked=false;U.keep=false;refreshSale()}else render();
   },
@@ -1425,7 +1429,7 @@ var A={
 function resetPinFlow(custId,reqId){
   var c=custById(custId);if(!c)return;
   openPin({mode:'create',title:'',t1:'Choisissez votre NOUVEAU code',t2:'Confirmez votre nouveau code',sub:'Compte de '+c.name+'. L’ancien code n’est pas demandé : saisissez 4 chiffres de votre choix.',onOk:function(pin){
-    c.pin=hashPin(pin,c.id);S.resets.forEach(function(r){if(r.custId===custId&&resetActive(r))r.status='done'});save();
+    c.pin=hashPin(pin,c.id);if(SYNC_ON)Sync.setPin(c.id,pin);S.resets.forEach(function(r){if(r.custId===custId&&resetActive(r))r.status='done'});save();
     toast('Code secret de '+c.name+' réinitialisé.');if(U.tab==='manage')render()}});
 }
 
@@ -1703,7 +1707,7 @@ var Sync=(function(){
   function idle(){var ae=document.activeElement;return !(ae&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))&&$('#modal').hidden&&!P}
   function run(){
     var fresh=!ST.cur[ST.auth.uid],chg=false,seller=ST.auth.profile.role==='seller';
-    return ensureTok().then(checkProfile).then(function(){return fresh?pull():push()}).then(function(c){chg=c;return fresh?push():pull()})
+    return ensureTok().then(checkProfile).then(function(){return fresh?pull():push()}).then(function(c){chg=c;return fresh?push():pull()}).then(function(c){chg=chg||c===true;return flushPins()})
       .then(function(c){chg=chg||c===true;if(seller&&!api.catDone){api.catDone=true;return pullCatalog().then(function(x){chg=chg||x})}})
       .then(function(){ST.last=Date.now();writeSt();setNet(true);return chg});
   }
@@ -1734,6 +1738,17 @@ var Sync=(function(){
     if(!S.sid||S.sid!==ST.sid){var keep={creds:ST.creds,auth:null};ST={v:1,sid:rid(),base:{},cur:{},creds:keep.creds||{},auth:null,rej:[],last:0};S=blank();S.sid=ST.sid;writeSt();rawSave()}
   }
   function settle(keys){var R=recs();keys.forEach(function(k){if(ST.base[k]!==undefined&&R[k])ST.base[k]=R[k].h});writeSt()}
+  function flushPins(){
+    var q=ST.pinq||{},ids=Object.keys(q);
+    if(!ids.length||ST.auth.offline)return Promise.resolve();
+    var p=Promise.resolve();
+    ids.forEach(function(id){p=p.then(function(){return call('POST','/rest/v1/rpc/set_customer_pin',{p_cust:id,p_pin:q[id]}).then(function(){delete ST.pinq[id];writeSt()},function(e){
+      if(!e.status||e.status>=500||e.status===401)throw e;
+      if(/introuvable/i.test(e.message||''))return;          /* le client n'est pas encore arrivé sur le serveur : on réessaie au prochain échange */
+      delete ST.pinq[id];writeSt()})})});
+    return p;
+  }
+  function setPin(id,pin){ST.pinq=ST.pinq||{};ST.pinq[id]=pin;writeSt();kick(300)}
   function rpc(name,args){
     if(!ST.auth||ST.auth.offline||!U.online)return Promise.reject(nerr('Connexion internet requise.',0));
     return call('POST','/rest/v1/rpc/'+name,args||{});
@@ -1748,7 +1763,7 @@ var Sync=(function(){
       +'<div class="item"><div class="grow muted">Ventes en attente d’envoi</div><b class="num">'+n+'</b></div>'
       +(rj.length?'<div class="note bad" style="margin-top:8px"><b>'+rj.length+' élément(s) refusé(s) par le serveur</b><div class="small">'+esc(rj[0].k+' : '+rj[0].msg)+'</div></div>':'');
   }
-  var api={ST:function(){return ST},login:login,logout:logout,first:first,kick:kick,start:start,init:init,settle:settle,rpc:rpc,profiles:profiles,msg:msg,
+  var api={ST:function(){return ST},setPin:setPin,login:login,logout:logout,first:first,kick:kick,start:start,init:init,settle:settle,rpc:rpc,profiles:profiles,msg:msg,
     pend:pendCount,statusHTML:statusHTML,cycle:function(){return cycle()},stockDirty:false,started:false,
     renamePhone:function(o,n){if(ST.creds[o]){ST.creds[n]=ST.creds[o];delete ST.creds[o]}if(ST.auth&&ST.auth.phone===o)ST.auth.phone=n;writeSt()},
     dirtyStock:function(){api.stockDirty=true;kick(400)},

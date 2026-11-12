@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="robots" content="noindex">
+<title>Interkin · Mon solde</title>
+<link rel="icon" href="icon-192.png">
+<style>
+:root{--bg:#F5F8FB;--surface:#FFFFFF;--ink:#0F1A24;--muted:#586878;--line:#D4DBE3;--accent:#1F46E0;--accent-ink:#FFFFFF;--pts:#9A5200;--pts-soft:#FCEAD2;--bad:#B3261E;--good:#17692F}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;min-height:100vh}
+main{max-width:480px;margin:0 auto;padding:max(20px,env(safe-area-inset-top)) 16px 40px}
+.brand{font-weight:700;font-size:22px;letter-spacing:.01em}
+h1{font-size:24px;margin:18px 0 6px}
+p{margin:0 0 16px;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:14px}
+label{display:block;font-weight:600;margin:12px 0 6px;font-size:14px}
+label:first-child{margin-top:0}
+.row{display:flex;gap:8px}
+input{width:100%;font:inherit;padding:13px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+input:focus{outline:2px solid var(--accent);outline-offset:1px}
+button{font:inherit;font-weight:600;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--ink);padding:13px 14px;cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);width:100%;margin-top:16px;padding:15px}
+button[disabled]{opacity:.6}
+.err{margin-top:12px;color:var(--bad);font-weight:600}
+.hint{font-size:13px;color:var(--muted);margin-top:12px}
+.bal{background:var(--pts-soft);border-radius:14px;padding:18px;text-align:center;margin-top:12px}
+.bal b{display:block;font-size:42px;line-height:1.1;color:var(--pts)}
+.bal span{color:var(--pts);font-weight:600}
+.hist{list-style:none;margin:10px 0 0;padding:0}
+.hist li{display:flex;gap:10px;justify-content:space-between;padding:10px 0;border-top:1px solid var(--line)}
+.hist li:first-child{border-top:0}
+.hist small{display:block;color:var(--muted)}
+.pos{color:var(--good);font-weight:700;white-space:nowrap}.neg{color:var(--bad);font-weight:700;white-space:nowrap}
+[hidden]{display:none!important}
+@media (prefers-color-scheme:dark){:root{--bg:#0E1620;--surface:#16222F;--ink:#EAF0F6;--muted:#9AA9B8;--line:#2A3A4A;--accent:#6D8BFF;--accent-ink:#0B1220;--pts:#FFB766;--pts-soft:#3A2A14;--bad:#FF8A80;--good:#7FD99A}input,button{background:#0E1620;color:var(--ink)}button.primary{background:var(--accent)}}
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">Interkin</div>
+  <h1>Mon solde de points</h1>
+  <p>Entrez le numéro de téléphone avec lequel vous êtes inscrit et votre code secret à 4 chiffres.</p>
+  <form id="f" class="card" autocomplete="off">
+    <label for="ph">Numéro de téléphone</label>
+    <input id="ph" inputmode="tel" autocomplete="tel" placeholder="ex. 0812345678" required>
+    <label for="pn">Code secret (4 chiffres)</label>
+    <div class="row"><input id="pn" type="password" inputmode="numeric" maxlength="4" pattern="\d{4}" autocomplete="off" required><button type="button" id="sh" style="white-space:nowrap">Afficher</button></div>
+    <button class="primary" id="go" type="submit">Voir mon solde</button>
+    <div class="err" id="err" role="alert" hidden></div>
+    <div class="hint">Après 5 essais ratés, le numéro est bloqué 15 minutes. Votre code secret est connu de vous seul : ne le donnez à personne.</div>
+  </form>
+  <section id="res" hidden>
+    <div class="card">
+      <div id="hello" style="font-weight:600"></div>
+      <div class="bal"><b id="bal"></b><span>points</span></div>
+      <h2 style="font-size:16px;margin:18px 0 0">Derniers mouvements</h2>
+      <ul class="hist" id="hist"></ul>
+      <button id="out" style="width:100%;margin-top:14px">Quitter</button>
+      <div class="hint">Cette page se ferme toute seule après 2 minutes.</div>
+    </div>
+  </section>
+</main>
+<script>
+var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};
+(function(){
+var $=function(i){return document.getElementById(i)},tm=null;
+var fmt=function(n){return String(Math.round(n*100)/100).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,' ')};
+var esc=function(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})};
+function show(msg){var e=$('err');e.textContent=msg||'';e.hidden=!msg}
+function reset(){clearTimeout(tm);$('res').hidden=true;$('f').hidden=false;$('pn').value='';$('hist').innerHTML='';$('bal').textContent='';show('')}
+$('sh').onclick=function(){var i=$('pn'),s=i.type==='password';i.type=s?'text':'password';this.textContent=s?'Masquer':'Afficher'};
+$('out').onclick=reset;
+$('pn').oninput=function(){var v=this.value.replace(/\D/g,'').slice(0,4);if(v!==this.value)this.value=v};
+$('f').onsubmit=function(ev){
+  ev.preventDefault();show('');
+  var ph=$('ph').value,pn=$('pn').value;
+  if(ph.replace(/\D/g,'').length<9){show('Saisissez votre numéro de téléphone.');return}
+  if(!/^\d{4}$/.test(pn)){show('Le code secret a 4 chiffres.');return}
+  var b=$('go');b.disabled=true;b.textContent='Vérification…';
+  fetch(SB.url+'/rest/v1/rpc/client_balance',{method:'POST',headers:{apikey:SB.key,'Content-Type':'application/json'},body:JSON.stringify({p_phone:ph,p_pin:pn}),cache:'no-store'})
+  .then(function(r){return r.json().catch(function(){return null}).then(function(j){return {ok:r.ok,j:j}})})
+  .then(function(x){
+    if(!x.ok||!x.j||x.j.error){show((x.j&&x.j.error)||'Service indisponible. Réessayez plus tard.');return}
+    var d=x.j;$('hello').textContent='Bonjour, '+(d.name||'');$('bal').textContent=fmt(d.balance||0);
+    $('hist').innerHTML=(d.history&&d.history.length?d.history.map(function(h){
+      var dt=new Date(Number(h.ts)),p=Number(h.pts);
+      return '<li><div>'+esc(h.note||'')+'<small>'+dt.toLocaleDateString('fr-FR')+' '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})+'</small></div><div class="'+(p>=0?'pos':'neg')+'">'+(p>0?'+':'')+fmt(p)+'</div></li>'}).join(''):'<li>Aucun mouvement pour le moment.</li>');
+    $('f').hidden=true;$('res').hidden=false;$('pn').value='';
+    clearTimeout(tm);tm=setTimeout(reset,120000);
+  },function(){show('Pas de connexion Internet. Réessayez.')})
+  .then(function(){b.disabled=false;b.textContent='Voir mon solde'});
+};
+})();
+</script>
+</body>
+</html>
