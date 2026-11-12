@@ -1187,9 +1187,11 @@ var OWNER_ONLY={newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1
 function tabView(){
   return {sale:saleView,clients:clientsView,products:productsView,stock:stockView,reports:reportsView,manage:manageView,cash:cashView}[U.tab]();
 }
+function closeStaleResets(){var ch=false;S.resets.forEach(function(r){if((r.status==='pending'||r.status==='approved')&&S.resets.some(function(x){return x.id!==r.id&&x.custId===r.custId&&x.status==='done'&&(x.doneAt||x.approvedAt||0)>=r.ts})){r.status='done';r.doneAt=Date.now();ch=true}});if(ch)save()}
 function render(){
   var app=$('#app'),dock=$('#dock');
   if(!U.user){app.innerHTML=viewLogin();dock.hidden=true;return}
+  if(U.user.role==='owner')closeStaleResets();
   if(U.tab==='manage'&&U.user.role!=='owner')U.tab='sale';
   if(U.tab==='cash'&&U.user.role==='owner')U.tab='sale';
   if(U.user.role!=='owner'&&!openShift(U.user.id)){app.innerHTML='<div class="shell">'+topbar()+'<main class="main">'+openCashView()+'</main></div>';dock.hidden=true;return}
