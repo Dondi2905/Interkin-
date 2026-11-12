@@ -1,6 +1,6 @@
 /* Interkin POS : mode sans réseau.
    Pour publier une mise à jour, changez simplement le numéro de VERSION. */
-var VERSION = 'interkin-v5';
+var VERSION = 'interkin-v6';
 var SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', function (e) {
@@ -14,6 +14,7 @@ self.addEventListener('activate', function (e) {
 self.addEventListener('fetch', function (e) {
   var req = e.request;
   if (req.method !== 'GET') return;
+  if (req.url.indexOf('.supabase.co') >= 0) return;   /* jamais de cache pour les échanges Supabase */
   /* l'application : réponse immédiate depuis la mémoire, mise à jour en arrière-plan */
   e.respondWith(caches.open(VERSION).then(function (cache) {
     return cache.match(req, { ignoreSearch: true }).then(function (hit) {
