@@ -765,7 +765,7 @@ function clientsView(){
    +'<div id="clientList" class="card" style="margin-top:12px">'+clientListHTML()+'</div>';
 }
 var RESET_TTL=30*60000;
-function resetActive(r){return r.status==='pending'||(r.status==='approved'&&Date.now()-r.approvedAt<RESET_TTL)}
+function resetActive(r){if(!(r.status==='pending'||(r.status==='approved'&&Date.now()-r.approvedAt<RESET_TTL)))return false;return !S.resets.some(function(x){return x.id!==r.id&&x.custId===r.custId&&x.status==='done'&&(x.doneAt||x.approvedAt||0)>=r.ts})}
 function resetOf(cid){return S.resets.filter(function(r){return r.custId===cid&&resetActive(r)})[0]}
 function resetBanner(){
   if(!U.user||U.user.role==='owner')return '';
@@ -1452,7 +1452,7 @@ var A={
 function resetPinFlow(custId,reqId){
   var c=custById(custId);if(!c)return;
   openPin({mode:'create',title:'',t1:'Choisissez votre NOUVEAU code',t2:'Confirmez votre nouveau code',sub:'Compte de '+c.name+'. L’ancien code n’est pas demandé : saisissez 4 chiffres de votre choix.',onOk:function(pin){
-    c.pin=hashPin(pin,c.id);if(SYNC_ON)Sync.setPin(c.id,pin);S.resets.forEach(function(r){if(r.custId===custId&&resetActive(r))r.status='done'});save();
+    c.pin=hashPin(pin,c.id);if(SYNC_ON)Sync.setPin(c.id,pin);S.resets.forEach(function(r){if(r.custId===custId&&resetActive(r)){r.status='done';r.doneAt=Date.now()}});save();
     toast('Code secret de '+c.name+' réinitialisé.');if(U.tab==='manage')render()}});
 }
 
