@@ -1157,7 +1157,12 @@ function shiftDetailHTML(h){
    +row('= Attendu en caisse',fmt(exp)+' FC')
    +(h.state==='closed'?row('Compté par le vendeur',h.counted==null?'—':fmt(h.counted)+' FC')+(h.diff==null?'':row('Écart',(h.diff>0?'+':'')+fmt(h.diff)+' FC',h.diff<0?'bad':h.diff>0?'pts':'good')):'')+'</div>'
    +'<div class="card" style="margin-top:12px">'+row('Total des ventes',fmt(tot)+' FC')+row('dont payé en points',fmt(pts)+' FC')+row('Monnaie transformée en points',fmt(keep)+' FC')+'</div>';
-  if(wd.length)o+='<div class="sub-h">Retraits pendant ce service</div><div class="card">'+wd.map(function(w){return '<div class="item"><div class="grow small">'+tstr(w.ts)+(w.note?'<div class="muted">'+esc(w.note)+'</div>':'')+'</div><b class="num">−'+fmt(w.amount)+' FC</b></div>'}).join('')+'</div>';
+  var mv=[];ss.forEach(function(x){mv.push({ts:x.ts,t:'Vente N° '+pad(x.no)+(x.custName?' · '+esc(x.custName):''),a:x.cashNet,sub:(x.pointsUsed?'payée en partie en points ('+fmt(x.pointsUsed)+')':'')+(x.change>0?(x.pointsUsed?' · ':'')+'monnaie rendue '+fmt(x.change-x.kept):'')})});
+  wd.forEach(function(w){mv.push({ts:w.ts,t:'Retrait du propriétaire',a:-w.amount,sub:w.note?esc(w.note):''})});
+  mv.sort(function(a,b){return a.ts-b.ts});var run=h.float;
+  o+='<div class="sub-h">Mouvements d’espèces</div><div class="card"><div class="item"><div class="grow small muted">'+tstr(h.openTs)+' · Fond de caisse de départ</div><b class="num">'+fmt(h.float)+' FC</b></div>'
+   +(mv.length?mv.map(function(m){run=r2(run+m.a);return '<div class="item" style="align-items:flex-start"><div class="grow small"><div>'+tstr(m.ts)+' · '+m.t+'</div>'+(m.sub?'<div class="muted">'+m.sub+'</div>':'')+'</div><div style="text-align:right"><b class="num '+(m.a<0?'bad':'good')+'">'+(m.a<0?'−':'+')+fmt(Math.abs(m.a))+'</b><div class="small muted num">solde '+fmt(run)+'</div></div></div>'}).join(''):'<div class="muted small" style="padding:8px 0">Aucun mouvement pour le moment.</div>')+'</div>';
+  if(false&&wd.length)o+='<div class="sub-h">Retraits pendant ce service</div><div class="card">'+wd.map(function(w){return '<div class="item"><div class="grow small">'+tstr(w.ts)+(w.note?'<div class="muted">'+esc(w.note)+'</div>':'')+'</div><b class="num">−'+fmt(w.amount)+' FC</b></div>'}).join('')+'</div>';
   o+='<div class="hint" style="margin-top:8px">Les retraits sont enregistrés par point de vente : ils comptent pour le vendeur en service à ce moment-là.</div><button class="btn wide" style="margin-top:12px" data-a="closeModal">Fermer</button>';
   return o;
 }
@@ -1174,13 +1179,13 @@ function liveCashInner(){
   var open=S.shifts.filter(function(h){return h.state==='open'}),T={f:0,i:0,o:0,e:0};
   var rows=open.map(function(h){var ss=shiftSales(h),i=0,o=0;ss.forEach(function(x){i+=x.cashNet});shiftWd(h).forEach(function(w){o+=w.amount});
     var e=expectedCash(h);T.f+=h.float;T.i+=i;T.o+=o;T.e+=e;var pd=pdvById(h.pdvId);
-    return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(h.name)+'</div><div class="small muted">PDV '+esc(pd?pd.name:'')+' · depuis '+tstr(h.openTs)+' · '+ss.length+' ticket(s)</div>'
-     +'<div class="small num muted">Fond '+fmt(h.float)+' · <span class="good">+'+fmt(i)+'</span> · <span class="bad">−'+fmt(o)+'</span></div></div><div style="text-align:right"><div class="small muted">En caisse</div><b class="num">'+fmt(e)+' FC</b></div></div>'}).join('');
+    return '<button class="rowbtn" data-a="shiftDetail" data-id="'+h.id+'"><div class="grow"><div style="font-weight:600">'+esc(h.name)+'</div><div class="small muted">PDV '+esc(pd?pd.name:'')+' · depuis '+tstr(h.openTs)+' · '+ss.length+' ticket(s)</div>'
+     +'<div class="small num muted">Fond '+fmt(h.float)+' · <span class="good">+'+fmt(i)+'</span> · <span class="bad">−'+fmt(o)+'</span></div></div><div style="text-align:right"><div class="small muted">En caisse</div><b class="num">'+fmt(e)+' FC</b></div></button>'}).join('');
   var st=typeof Sync!=='undefined'&&Sync.ST?Sync.ST():null;
   return '<div class="card">'+(open.length?rows
    +'<div class="item" style="border-top:2px solid var(--line,#ddd)"><div class="grow"><b>Total de tous les vendeurs</b><div class="small num muted">Fonds '+fmt(T.f)+' · <span class="good">+'+fmt(T.i)+'</span> · <span class="bad">−'+fmt(T.o)+'</span></div></div><div style="text-align:right"><b class="num" style="font-size:18px">'+fmt(T.e)+' FC</b></div></div>'
    :'<div class="muted">Aucun vendeur en service.</div>')
-   +'<div class="hint" style="margin-top:8px">Fond de départ, <b>+</b> espèces encaissées, <b>−</b> retraits. Mise à jour automatique toutes les quelques secondes'+(st&&st.last?' (dernier échange '+tstr(st.last)+')':'')+'.</div></div>';
+   +'<div class="hint" style="margin-top:8px">Touchez un vendeur pour voir le détail de ses mouvements. Fond de départ, <b>+</b> espèces encaissées, <b>−</b> retraits. Mise à jour automatique toutes les quelques secondes'+(st&&st.last?' (dernier échange '+tstr(st.last)+')':'')+'.</div></div>';
 }
 function liveCashHTML(){return '<h2 class="h">Caisse en temps réel</h2><div id="liveCash">'+liveCashInner()+'</div>'}
 function refreshLive(){var e=document.getElementById('liveCash');if(e&&U.user&&U.user.role==='owner')e.innerHTML=liveCashInner()}
@@ -1577,7 +1582,7 @@ window.addEventListener('offline',function(){setOnline(false)});
 /* ---------- synchronisation Supabase ---------- */
 var Sync=(function(){
   var SK='interkin-sync-v1',HALT={halt:1};
-  var ST=readSt(),busy=null,timer=null,needRender=false,refreshing=null;
+  var ST=readSt(),busy=null,timer=null,needRender=false,refreshing=null,again=false,tick=0;
   function rid(){return Math.random().toString(36).slice(2,10)}
   function readSt(){try{var o=JSON.parse(localStorage.getItem(SK));if(o&&o.v===1)return o}catch(e){}return {v:1,sid:'',base:{},cur:{},creds:{},auth:null,rej:[],last:0}}
   function writeSt(){try{localStorage.setItem(SK,JSON.stringify(ST))}catch(e){}}
@@ -1809,12 +1814,12 @@ var Sync=(function(){
       .then(function(){ST.last=Date.now();writeSt();setNet(true);return chg});
   }
   function cycle(force){
-    if(busy)return busy;
+    if(busy){again=true;return busy}
     if(!ST.auth||(!U.user&&!force))return Promise.resolve();
     busy=run().then(function(ch){
-      busy=null;if(ch&&typeof refreshLive==='function')refreshLive();if(ch||needRender){if(U.user&&idle()){needRender=false;if(window.dbg)dbg('affichage rafraichi (synchro)');render()}else needRender=true}
+      busy=null;if(again){again=false;kick(200)}if(ch&&typeof refreshLive==='function')refreshLive();if(ch||needRender){if(U.user&&idle()){needRender=false;if(window.dbg)dbg('affichage rafraichi (synchro)');render()}else needRender=true}
     },function(e){
-      busy=null;
+      busy=null;if(again){again=false;kick(2000)}
       if(e===HALT)return;
       if(!e.status){setNet(false);return}
       if(e.expired&&U.user){forceOut('Votre connexion a expiré. Reconnectez-vous avec Internet.');return}
@@ -1823,10 +1828,10 @@ var Sync=(function(){
     });
     return busy;
   }
-  function kick(ms){if(!SYNC_ON||!ST.auth)return;clearTimeout(timer);timer=setTimeout(function(){timer=null;cycle()},ms==null?1500:ms)}
+  function kick(ms){if(!SYNC_ON||!ST.auth)return;clearTimeout(timer);timer=setTimeout(function(){timer=null;cycle()},ms==null?600:ms)}
   function start(){
     if(!SYNC_ON||api.started)return;api.started=true;
-    setInterval(function(){if(document.visibilityState!=='hidden')cycle()},12000);
+    setInterval(function(){if(document.visibilityState==='hidden')return;var o=ST.auth&&ST.auth.profile&&ST.auth.profile.role==='owner';if(!o&&(tick++%2))return;cycle()},6000);
     document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')kick(200)});
     kick(300);
   }
