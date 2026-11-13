@@ -1170,18 +1170,20 @@ function finishShift(h,counted,forced){
   h.closeTs=Date.now();h.expected=expectedCash(h);h.counted=forced?null:counted;h.diff=forced?null:r2(counted-h.expected);h.forced=!!forced;h.state='closed';
   logEv('shift_close','Clôture de caisse de '+h.name+' : attendu '+fmt(h.expected)+' FC'+(forced?' (clôture forcée)':', compté '+fmt(counted)+' FC, écart '+fmt(h.diff)+' FC'));
 }
-function liveCashHTML(){
+function liveCashInner(){
   var open=S.shifts.filter(function(h){return h.state==='open'}),T={f:0,i:0,o:0,e:0};
   var rows=open.map(function(h){var ss=shiftSales(h),i=0,o=0;ss.forEach(function(x){i+=x.cashNet});shiftWd(h).forEach(function(w){o+=w.amount});
     var e=expectedCash(h);T.f+=h.float;T.i+=i;T.o+=o;T.e+=e;var pd=pdvById(h.pdvId);
     return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(h.name)+'</div><div class="small muted">PDV '+esc(pd?pd.name:'')+' · depuis '+tstr(h.openTs)+' · '+ss.length+' ticket(s)</div>'
      +'<div class="small num muted">Fond '+fmt(h.float)+' · <span class="good">+'+fmt(i)+'</span> · <span class="bad">−'+fmt(o)+'</span></div></div><div style="text-align:right"><div class="small muted">En caisse</div><b class="num">'+fmt(e)+' FC</b></div></div>'}).join('');
   var st=typeof Sync!=='undefined'&&Sync.ST?Sync.ST():null;
-  return '<h2 class="h">Caisse en temps réel</h2><div class="card">'+(open.length?rows
+  return '<div class="card">'+(open.length?rows
    +'<div class="item" style="border-top:2px solid var(--line,#ddd)"><div class="grow"><b>Total de tous les vendeurs</b><div class="small num muted">Fonds '+fmt(T.f)+' · <span class="good">+'+fmt(T.i)+'</span> · <span class="bad">−'+fmt(T.o)+'</span></div></div><div style="text-align:right"><b class="num" style="font-size:18px">'+fmt(T.e)+' FC</b></div></div>'
    :'<div class="muted">Aucun vendeur en service.</div>')
    +'<div class="hint" style="margin-top:8px">Fond de départ, <b>+</b> espèces encaissées, <b>−</b> retraits. Mise à jour automatique toutes les quelques secondes'+(st&&st.last?' (dernier échange '+tstr(st.last)+')':'')+'.</div></div>';
 }
+function liveCashHTML(){return '<h2 class="h">Caisse en temps réel</h2><div id="liveCash">'+liveCashInner()+'</div>'}
+function refreshLive(){var e=document.getElementById('liveCash');if(e&&U.user&&U.user.role==='owner')e.innerHTML=liveCashInner()}
 function cashAdminView(){
   var open=S.shifts.filter(function(h){return h.state==='open'});
   var h=liveCashHTML()+'<h2 class="h">Services en cours</h2><div class="card">'+(open.length?open.map(function(x){var pd=pdvById(x.pdvId),ss=shiftSales(x);
@@ -1810,7 +1812,7 @@ var Sync=(function(){
     if(busy)return busy;
     if(!ST.auth||(!U.user&&!force))return Promise.resolve();
     busy=run().then(function(ch){
-      busy=null;if(ch||needRender){if(U.user&&idle()){needRender=false;if(window.dbg)dbg('affichage rafraichi (synchro)');render()}else needRender=true}
+      busy=null;if(ch&&typeof refreshLive==='function')refreshLive();if(ch||needRender){if(U.user&&idle()){needRender=false;if(window.dbg)dbg('affichage rafraichi (synchro)');render()}else needRender=true}
     },function(e){
       busy=null;
       if(e===HALT)return;
