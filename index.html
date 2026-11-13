@@ -1144,19 +1144,48 @@ function cashView(){
   if(mine.length)out+='<h2 class="h">Mes dernières clôtures</h2><div class="card">'+mine.map(shiftRow).join('')+'</div>';
   return out;
 }
-function shiftRow(h){
+function shiftDetailHTML(h){
+  var ss=shiftSales(h),wd=shiftWd(h),pd=pdvById(h.pdvId),tot=0,cash=0,pts=0,keep=0;
+  ss.forEach(function(x){tot+=x.total;cash+=x.cashNet;pts+=x.pointsUsed||0;keep+=x.kept||0});
+  var wt=0;wd.forEach(function(w){wt+=w.amount});
+  var exp=h.state==='closed'?h.expected:expectedCash(h);
+  var row=function(l,v,c){return '<div class="item"><div class="grow muted">'+l+'</div><b class="num '+(c||'')+'">'+v+'</b></div>'};
+  var o='<h3>Flux de caisse</h3><div class="muted small">'+esc(h.name)+' · PDV '+esc(pd?pd.name:'')+'<br>'+dstr(h.openTs)+' · '+tstr(h.openTs)+' → '+(h.closeTs?tstr(h.closeTs):'en cours')+'</div><div class="card" style="margin-top:12px">'
+   +row('Fond de caisse de départ',fmt(h.float)+' FC')
+   +row('+ Espèces encaissées ('+ss.length+' ticket'+(ss.length>1?'s':'')+')','+'+fmt(cash)+' FC','good')
+   +row('− Retraits du propriétaire ('+wd.length+')','−'+fmt(wt)+' FC',wt?'bad':'')
+   +row('= Attendu en caisse',fmt(exp)+' FC')
+   +(h.state==='closed'?row('Compté par le vendeur',h.counted==null?'—':fmt(h.counted)+' FC')+(h.diff==null?'':row('Écart',(h.diff>0?'+':'')+fmt(h.diff)+' FC',h.diff<0?'bad':h.diff>0?'pts':'good')):'')+'</div>'
+   +'<div class="card" style="margin-top:12px">'+row('Total des ventes',fmt(tot)+' FC')+row('dont payé en points',fmt(pts)+' FC')+row('Monnaie transformée en points',fmt(keep)+' FC')+'</div>';
+  if(wd.length)o+='<div class="sub-h">Retraits pendant ce service</div><div class="card">'+wd.map(function(w){return '<div class="item"><div class="grow small">'+tstr(w.ts)+(w.note?'<div class="muted">'+esc(w.note)+'</div>':'')+'</div><b class="num">−'+fmt(w.amount)+' FC</b></div>'}).join('')+'</div>';
+  o+='<div class="hint" style="margin-top:8px">Les retraits sont enregistrés par point de vente : ils comptent pour le vendeur en service à ce moment-là.</div><button class="btn wide" style="margin-top:12px" data-a="closeModal">Fermer</button>';
+  return o;
+}
+function shiftRow(h,adm){
   var d=h.diff,chip=h.forced?'<span class="chip">Clôturé par le propriétaire</span>':(d===0?'<span class="chip good">Caisse juste</span>':'<span class="chip bad">'+(d>0?'Excédent +':'Manque ')+fmt(Math.abs(d))+' FC</span>');
   return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(h.name)+'</div><div class="small muted">'+dstr(h.openTs)+' · '+tstr(h.openTs)+' → '+tstr(h.closeTs)+'</div>'
-   +'<div class="small num muted">Attendu '+fmt(h.expected)+' · Compté '+(h.counted==null?'—':fmt(h.counted))+(h.float!==h.suggested?' · fond déclaré '+fmt(h.float)+' (prévu '+fmt(h.suggested)+')':'')+'</div></div>'+chip+'</div>';
+   +'<div class="small num muted">Attendu '+fmt(h.expected)+' · Compté '+(h.counted==null?'—':fmt(h.counted))+(h.float!==h.suggested?' · fond déclaré '+fmt(h.float)+' (prévu '+fmt(h.suggested)+')':'')+'</div></div><div class="stack">'+chip+(adm?'<button class="btn sm" data-a="shiftDetail" data-id="'+h.id+'">Détail</button>':'')+'</div></div>';
 }
 function finishShift(h,counted,forced){
   h.closeTs=Date.now();h.expected=expectedCash(h);h.counted=forced?null:counted;h.diff=forced?null:r2(counted-h.expected);h.forced=!!forced;h.state='closed';
   logEv('shift_close','Clôture de caisse de '+h.name+' : attendu '+fmt(h.expected)+' FC'+(forced?' (clôture forcée)':', compté '+fmt(counted)+' FC, écart '+fmt(h.diff)+' FC'));
 }
+function liveCashHTML(){
+  var open=S.shifts.filter(function(h){return h.state==='open'}),T={f:0,i:0,o:0,e:0};
+  var rows=open.map(function(h){var ss=shiftSales(h),i=0,o=0;ss.forEach(function(x){i+=x.cashNet});shiftWd(h).forEach(function(w){o+=w.amount});
+    var e=expectedCash(h);T.f+=h.float;T.i+=i;T.o+=o;T.e+=e;var pd=pdvById(h.pdvId);
+    return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(h.name)+'</div><div class="small muted">PDV '+esc(pd?pd.name:'')+' · depuis '+tstr(h.openTs)+' · '+ss.length+' ticket(s)</div>'
+     +'<div class="small num muted">Fond '+fmt(h.float)+' · <span class="good">+'+fmt(i)+'</span> · <span class="bad">−'+fmt(o)+'</span></div></div><div style="text-align:right"><div class="small muted">En caisse</div><b class="num">'+fmt(e)+' FC</b></div></div>'}).join('');
+  var st=typeof Sync!=='undefined'&&Sync.ST?Sync.ST():null;
+  return '<h2 class="h">Caisse en temps réel</h2><div class="card">'+(open.length?rows
+   +'<div class="item" style="border-top:2px solid var(--line,#ddd)"><div class="grow"><b>Total de tous les vendeurs</b><div class="small num muted">Fonds '+fmt(T.f)+' · <span class="good">+'+fmt(T.i)+'</span> · <span class="bad">−'+fmt(T.o)+'</span></div></div><div style="text-align:right"><b class="num" style="font-size:18px">'+fmt(T.e)+' FC</b></div></div>'
+   :'<div class="muted">Aucun vendeur en service.</div>')
+   +'<div class="hint" style="margin-top:8px">Fond de départ, <b>+</b> espèces encaissées, <b>−</b> retraits. Mise à jour automatique toutes les quelques secondes'+(st&&st.last?' (dernier échange '+tstr(st.last)+')':'')+'.</div></div>';
+}
 function cashAdminView(){
   var open=S.shifts.filter(function(h){return h.state==='open'});
-  var h='<h2 class="h">Services en cours</h2><div class="card">'+(open.length?open.map(function(x){var pd=pdvById(x.pdvId),ss=shiftSales(x);
-    return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(x.name)+'</div><div class="small muted">PDV '+esc(pd?pd.name:'')+' · depuis '+tstr(x.openTs)+' · '+ss.length+' ticket(s)</div><div class="small num muted">Fond '+fmt(x.float)+' · attendu en caisse '+fmt(expectedCash(x))+' FC</div></div><button class="btn sm danger" data-a="forceClose" data-id="'+x.id+'">Clôturer</button></div>'}).join(''):'<div class="muted">Aucun vendeur en service.</div>')+'</div>';
+  var h=liveCashHTML()+'<h2 class="h">Services en cours</h2><div class="card">'+(open.length?open.map(function(x){var pd=pdvById(x.pdvId),ss=shiftSales(x);
+    return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(x.name)+'</div><div class="small muted">PDV '+esc(pd?pd.name:'')+' · depuis '+tstr(x.openTs)+' · '+ss.length+' ticket(s)</div><div class="small num muted">Fond '+fmt(x.float)+' · attendu en caisse '+fmt(expectedCash(x))+' FC</div></div><div class="stack"><button class="btn sm" data-a="shiftDetail" data-id="'+x.id+'">Détail</button><button class="btn sm danger" data-a="forceClose" data-id="'+x.id+'">Clôturer</button></div></div>'}).join(''):'<div class="muted">Aucun vendeur en service.</div>')+'</div>';
   h+='<h2 class="h">Fond de caisse</h2><div class="card">'+S.pdvs.map(function(pd){return '<div class="item"><div class="grow">PDV '+esc(pd.name)+'</div><b class="num">'+fmt(suggestedFloat(pd.id))+' FC</b></div>'}).join('')
    +'<div class="hint" style="margin:6px 0">Montant prévu pour le prochain vendeur : ce que le vendeur précédent a compté, moins vos retraits. Vous pouvez le fixer vous-même.</div>'
    +pdvSelect('fpd',S.pdvs[0]&&S.pdvs[0].id)+'<label class="lbl" for="ffa">Nouveau fond de caisse (FC)</label><div class="row"><input id="ffa" class="inp grow" inputmode="decimal" data-i="dn"><button class="btn primary" data-a="setFloat">Définir</button></div></div>';
@@ -1168,7 +1197,7 @@ function cashAdminView(){
   var gap={};cl.forEach(function(x){if(x.diff!=null&&Date.now()-x.closeTs<30*864e5){gap[x.name]=(gap[x.name]||0)+x.diff}});
   var gk=Object.keys(gap);
   h+='<h2 class="h">Écarts sur 30 jours</h2><div class="card">'+(gk.length?gk.map(function(k){var v=r2(gap[k]);return '<div class="item"><div class="grow">'+esc(k)+'</div><b class="num '+(v<0?'bad':v>0?'pts':'good')+'">'+(v>0?'+':'')+fmt(v)+' FC</b></div>'}).join(''):'<div class="muted">Aucune clôture.</div>')+'</div>';
-  h+='<h2 class="h">Dernières clôtures</h2><div class="card">'+(cl.length?cl.slice(0,15).map(shiftRow).join(''):'<div class="muted">Aucune clôture pour le moment.</div>')+'</div>';
+  h+='<h2 class="h">Dernières clôtures</h2><div class="card">'+(cl.length?cl.slice(0,15).map(function(x){return shiftRow(x,1)}).join(''):'<div class="muted">Aucune clôture pour le moment.</div>')+'</div>';
   return h;
 }
 function staffView(){
@@ -1205,7 +1234,7 @@ function startSession(u,silent){
 }
 function logoutNow(){if(U.user)logEv('logout','Déconnexion');U.user=null;S.session=null;resetSale();save();render();if(SYNC_ON)Sync.logout()}
 var STOCK_ACT={addStock:1,saveStock:1,saveProd:1,delProd:1,saveIng:1,saveCount:1,countIng:1};
-var OWNER_ONLY={editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
+var OWNER_ONLY={shiftDetail:1,editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
 
 /* rendu général */
 function tabView(){
@@ -1363,6 +1392,7 @@ var A={
   reqReset:function(d){
     if(resetOf(d.id)){toast('Une demande est déjà en cours pour ce client.');return}
     S.resets.push({id:'q'+nid(),custId:d.id,ts:Date.now(),status:'pending',pdvId:U.user.pdvId});save();closeModal();toast('Demande envoyée au propriétaire.')},
+  shiftDetail:function(d){var h=S.shifts.find(function(x){return x.id===d.id});if(h)openModal(shiftDetailHTML(h))},
   resetOwner:function(d){closeModal();resetPinFlow(d.id,null)},
   editClient:function(d){var c=custById(d.id);if(!c)return;
     openModal('<h3>Modifier le client</h3><label class="lbl" for="en">Nom complet</label><input id="en" class="inp" autocomplete="off" value="'+esc(c.name)+'">'
