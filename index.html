@@ -826,6 +826,7 @@ function clientDetailHTML(id){
     h+='</div>';
   }
   h+='<div class="stack" style="margin-top:16px"><button class="btn primary wide" data-a="useClient" data-id="'+id+'">Utiliser pour une vente</button>';
+  if(owner)h+='<button class="btn wide" data-a="editClient" data-id="'+id+'">Modifier le nom ou le numéro</button>';
   if(owner)h+='<button class="btn wide" data-a="resetOwner" data-id="'+id+'">Réinitialiser le code secret (identité vérifiée)</button>';
   else{var rq=resetOf(id);
     if(!rq)h+='<button class="btn wide" data-a="reqReset" data-id="'+id+'">Demander la réinitialisation du code</button>';
@@ -1204,7 +1205,7 @@ function startSession(u,silent){
 }
 function logoutNow(){if(U.user)logEv('logout','Déconnexion');U.user=null;S.session=null;resetSale();save();render();if(SYNC_ON)Sync.logout()}
 var STOCK_ACT={addStock:1,saveStock:1,saveProd:1,delProd:1,saveIng:1,saveCount:1,countIng:1};
-var OWNER_ONLY={newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
+var OWNER_ONLY={editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
 
 /* rendu général */
 function tabView(){
@@ -1363,6 +1364,18 @@ var A={
     if(resetOf(d.id)){toast('Une demande est déjà en cours pour ce client.');return}
     S.resets.push({id:'q'+nid(),custId:d.id,ts:Date.now(),status:'pending',pdvId:U.user.pdvId});save();closeModal();toast('Demande envoyée au propriétaire.')},
   resetOwner:function(d){closeModal();resetPinFlow(d.id,null)},
+  editClient:function(d){var c=custById(d.id);if(!c)return;
+    openModal('<h3>Modifier le client</h3><label class="lbl" for="en">Nom complet</label><input id="en" class="inp" autocomplete="off" value="'+esc(c.name)+'">'
+     +'<label class="lbl" for="ep">Numéro de téléphone</label><input id="ep" class="inp" inputmode="tel" autocomplete="off" value="'+esc(c.phone)+'">'
+     +'<div class="hint" style="margin-top:8px">Les points, l’historique, le parrain et le code secret ne changent pas. Le client se connecte à sa page avec le nouveau numéro.</div>'
+     +'<div class="row" style="margin-top:18px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="saveEditClient" data-id="'+c.id+'">Enregistrer</button></div>')},
+  saveEditClient:function(d){var c=custById(d.id);if(!c)return;
+    var name=$('#en').value.trim().replace(/\s+/g,' '),phone=$('#ep').value.trim();
+    if(name.length<3){toast('Saisissez le nom complet du client.');return}
+    if(digits(phone).length<9){toast('Le numéro de téléphone doit avoir 9 chiffres minimum.');return}
+    if(S.customers.some(function(x){return x.id!==c.id&&digits(x.phone).slice(-9)===digits(phone).slice(-9)})){toast('Ce numéro est déjà utilisé par un autre client.');return}
+    var old=c.name+' '+c.phone;c.name=name;c.phone=phone;
+    logEv('client_edit','Client modifié : '+old+' → '+name+' '+phone);save();closeModal();render();toast('Informations du client modifiées.')},
   approveReset:function(d){var r=S.resets.find(function(x){return x.id===d.id});if(r&&r.status==='pending'){r.status='approved';r.approvedAt=Date.now();logEv('reset','Réinitialisation de code autorisée');save();render();toast('Réinitialisation autorisée pour 30 minutes.')}},
   rejectReset:function(d){var r=S.resets.find(function(x){return x.id===d.id});if(r&&resetActive(r)){r.status='rejected';save();render();toast('Demande refusée.')}},
   doReset:function(d){var r=S.resets.find(function(x){return x.id===d.id});if(!r||r.status!=='approved'||!resetActive(r)){toast('Autorisation expirée ou absente.');closeModal();render();return}closeModal();resetPinFlow(r.custId,r.id)},
