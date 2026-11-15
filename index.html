@@ -789,8 +789,10 @@ function clientsView(){
 var RESET_TTL=30*60000;
 function resetActive(r){if(!(r.status==='pending'||(r.status==='approved'&&Date.now()-r.approvedAt<RESET_TTL)))return false;return !S.resets.some(function(x){return x.id!==r.id&&x.custId===r.custId&&x.status==='done'&&(x.doneAt||x.approvedAt||0)>=r.ts})}
 function resetOf(cid){return S.resets.filter(function(r){return r.custId===cid&&resetActive(r)})[0]}
+function lockReqBanner(){return S.users.filter(function(u){return u.locked&&u.unlockReq}).map(function(u){return '<div class="note pts" style="margin-top:12px"><b>Demande de reconnexion</b> : '+esc(u.name)+' ('+tstr(Date.parse(u.unlockReq))+')<button class="btn sm primary" style="margin-top:8px" data-a="unlockSeller" data-id="'+u.id+'">Autoriser la reconnexion</button></div>'}).join('')}
 function resetBanner(){
-  if(!U.user||U.user.role==='owner')return '';
+  if(U.user&&U.user.role==='owner')return lockReqBanner();
+  if(!U.user)return '';
   return S.resets.filter(function(r){return r.status==='approved'&&resetActive(r)&&r.pdvId===U.user.pdvId}).map(function(r){var c=custById(r.custId);
     return '<div class="note pts" style="margin-top:12px"><b>Réinitialisation autorisée</b> pour '+esc(c?c.name:'?')+' (valable '+Math.max(1,Math.ceil((RESET_TTL-(Date.now()-r.approvedAt))/60000))+' min).<button class="btn sm primary" style="margin-top:8px" data-a="doReset" data-id="'+r.id+'">Le client choisit son nouveau code</button></div>'}).join('');
 }
@@ -1208,12 +1210,12 @@ function cashAdminView(){
   return h;
 }
 function staffView(){
-  var h='<h2 class="h">Mon compte</h2><div class="card"><div class="item"><div class="grow"><div style="font-weight:600">Propriétaire</div><div class="small muted num">'+esc((userById(U.user.id)||{}).phone||'')+'</div></div><div class="stack"><button class="btn sm" data-a="phoneAsk" data-id="'+U.user.id+'">Changer mon numéro</button><button class="btn sm" data-a="pwSeller" data-id="'+U.user.id+'">Changer mon mot de passe</button></div></div></div>';
+  var h=lockReqBanner()+'<h2 class="h">Mon compte</h2><div class="card"><div class="item"><div class="grow"><div style="font-weight:600">Propriétaire</div><div class="small muted num">'+esc((userById(U.user.id)||{}).phone||'')+'</div></div><div class="stack"><button class="btn sm" data-a="phoneAsk" data-id="'+U.user.id+'">Changer mon numéro</button><button class="btn sm" data-a="pwSeller" data-id="'+U.user.id+'">Changer mon mot de passe</button></div></div></div>';
   h+='<h2 class="h">Comptes des vendeurs</h2>';
   S.pdvs.forEach(function(pd){
     var us=S.users.filter(function(u){return u.role==='seller'&&u.pdvId===pd.id});
     h+='<div class="card" style="margin-top:12px"><div class="sub-h" style="margin-top:0">PDV '+esc(pd.name)+'</div>'+(us.length?us.map(function(u){var sh=openShift(u.id);
-      return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(u.name)+'</div><div class="small muted num">'+esc(u.phone)+' · '+(u.shift==='matin'?'matin':'soir')+'</div><div class="small '+(sh?'good':'muted')+'">'+(sh?'Service ouvert depuis '+tstr(sh.openTs):'Hors service')+'</div></div><div class="stack"><button class="btn sm" data-a="pwSeller" data-id="'+u.id+'">Mot de passe</button><button class="btn sm" data-a="phoneAsk" data-id="'+u.id+'">Numéro</button>'+(SYNC_ON?'<button class="btn sm" data-a="forceOutSeller" data-id="'+u.id+'">Déconnecter</button>':'')+'<button class="btn sm danger" data-a="delSeller" data-id="'+u.id+'">Supprimer</button></div></div>'}).join(''):'<div class="muted">Aucun vendeur.</div>')+'</div>';
+      return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(u.name)+'</div><div class="small muted num">'+esc(u.phone)+' · '+(u.shift==='matin'?'matin':'soir')+'</div><div class="small '+(sh?'good':'muted')+'">'+(sh?'Service ouvert depuis '+tstr(sh.openTs):'Hors service')+'</div>'+(u.locked?'<div class="small bad"><b>Verrouillé</b>'+(u.unlockReq?' · demande de reconnexion à '+tstr(Date.parse(u.unlockReq)):' · aucune demande')+'</div>':'')+'</div><div class="stack"><button class="btn sm" data-a="pwSeller" data-id="'+u.id+'">Mot de passe</button><button class="btn sm" data-a="phoneAsk" data-id="'+u.id+'">Numéro</button>'+(SYNC_ON?(u.locked?'<button class="btn sm primary" data-a="unlockSeller" data-id="'+u.id+'">Autoriser la reconnexion</button>':'<button class="btn sm" data-a="forceOutSeller" data-id="'+u.id+'">Déconnecter</button><button class="btn sm" data-a="lockAsk" data-id="'+u.id+'">Verrouiller</button>'):'')+'<button class="btn sm danger" data-a="delSeller" data-id="'+u.id+'">Supprimer</button></div></div>'}).join(''):'<div class="muted">Aucun vendeur.</div>')+'</div>';
   });
   h+='<h2 class="h">Créer un compte vendeur</h2><div class="card"><label class="lbl" for="nsn">Nom</label><input id="nsn" class="inp" maxlength="40">'
    +'<label class="lbl" for="nsp">Numéro de téléphone (identifiant)</label><input id="nsp" class="inp" inputmode="tel">'
@@ -1241,7 +1243,7 @@ function startSession(u,silent){
 }
 function logoutNow(){if(U.user)logEv('logout','Déconnexion');U.user=null;S.session=null;resetSale();save();render();if(SYNC_ON)Sync.logout()}
 var STOCK_ACT={addStock:1,saveStock:1,saveProd:1,delProd:1,saveIng:1,saveCount:1,countIng:1};
-var OWNER_ONLY={shiftDetail:1,editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
+var OWNER_ONLY={lockAsk:1,lockDo:1,unlockSeller:1,shiftDetail:1,editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
 
 /* rendu général */
 function tabView(){
@@ -1277,6 +1279,7 @@ var A={
       }).catch(function(er){
         if(er&&er.status===400){f.n++;if(f.n>=5){f.until=Date.now()+300000;f.n=0}U.fails[ph]=f}
         if(er&&er.halt)return;
+        if(er&&er.locked){openModal('<h3>Compte verrouillé</h3><p class="muted">Le propriétaire a verrouillé votre compte. Envoyez-lui une demande : vous pourrez vous reconnecter dès qu’il l’aura autorisée.</p><div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Fermer</button><button class="btn primary grow" data-a="askUnlock">Demander l’autorisation</button></div>');return}
         toast(Sync.msg(er),'bad');
       }).then(function(){var b2=$('[data-a=login]');if(b2){b2.disabled=false;b2.textContent='Ouvrir la session'}});
       return;
@@ -1319,6 +1322,11 @@ var A={
     if(!btn.dataset.ok){btn.dataset.ok='1';btn.textContent='Confirmer';return}
     if(SYNC_ON){Sync.rpc('delete_user',{p_id:u.id}).then(function(){logEv('seller_del','Compte vendeur supprimé : '+u.name);save();return Sync.profiles()}).then(function(){render();toast('Compte supprimé.')}).catch(function(er){toast(Sync.msg(er),'bad')});return}
     S.users=S.users.filter(function(x){return x.id!==u.id});logEv('seller_del','Compte vendeur supprimé : '+u.name);save();render();toast('Compte supprimé.')},
+  askUnlock:function(){var ph=digits(($('#lph')||{}).value),pw=($('#lpw')||{}).value||'';if(!ph||!pw){toast('Saisissez votre numéro et votre mot de passe.');return}
+    Sync.requestUnlock(ph,pw).then(function(){closeModal();toast('Demande envoyée au propriétaire. Réessayez après son autorisation.')}).catch(function(er){toast(Sync.msg(er),'bad')})},
+  lockAsk:function(d){var u=userById(d.id);if(!u)return;openModal('<h3>Déconnecter et verrouiller</h3><p class="muted">'+esc(u.name)+' sera déconnecté tout de suite et ne pourra plus se reconnecter sans votre autorisation, même avec le bon mot de passe.</p><div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn danger grow" data-a="lockDo" data-id="'+u.id+'">Verrouiller</button></div>')},
+  lockDo:function(d){var u=userById(d.id);if(!u)return;Sync.rpc('lock_seller',{p_id:u.id}).then(function(){u.locked=true;u.unlockReq=null;logEv('seller_lock','Compte verrouillé : '+u.name);save();closeModal();render();toast('Compte verrouillé.')}).catch(function(er){toast(Sync.msg(er),'bad')})},
+  unlockSeller:function(d){var u=userById(d.id);if(!u)return;Sync.rpc('unlock_seller',{p_id:u.id}).then(function(){u.locked=false;u.unlockReq=null;logEv('seller_unlock','Reconnexion autorisée : '+u.name);save();render();toast(u.name+' peut se reconnecter.')}).catch(function(er){toast(Sync.msg(er),'bad')})},
   forceOutSeller:function(d){var u=userById(d.id);if(!u)return;Sync.rpc('force_logout',{p_id:u.id}).then(function(){logEv('seller_out','Déconnexion à distance : '+u.name);save();toast('Le vendeur sera déconnecté dans quelques secondes.')}).catch(function(er){toast(Sync.msg(er),'bad')})},
   phoneAsk:function(d){var u=userById(d.id);if(!u)return;openModal('<h3>Changer le numéro</h3><p class="muted" style="margin:0 0 10px">'+esc(u.role==='owner'?'Compte propriétaire':u.name)+' · actuellement '+esc(u.phone)+'</p><label class="lbl" for="nph">Nouveau numéro (identifiant de connexion)</label><input id="nph" class="inp" inputmode="tel"><div class="hint" style="margin-top:6px">Ce numéro devient l’identifiant de connexion. L’ancien ne fonctionnera plus.</div><div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="phoneDo" data-id="'+u.id+'">Enregistrer</button></div>')},
   phoneDo:function(d){var u=userById(d.id),ph=digits($('#nph').value);if(!u)return;
@@ -1675,7 +1683,7 @@ var Sync=(function(){
       var el=$('#net');if(el)el.innerHTML=netHTML();if(U.user&&U.tab==='sale'&&$('#payBox'))refreshPay()}
     else{var el2=$('#net');if(el2)el2.innerHTML=netHTML()}
   }
-  function toUser(p){return {id:p.id,name:p.name,phone:p.phone,role:p.role,shift:p.shift||undefined,pdvId:p.pdv_id||null}}
+  function toUser(p){return {id:p.id,name:p.name,phone:p.phone,role:p.role,shift:p.shift||undefined,pdvId:p.pdv_id||null,locked:!!p.locked,unlockReq:p.unlock_req||null}}
 
   /* ----- connexion ----- */
   function login(phone,pw){
@@ -1685,6 +1693,8 @@ var Sync=(function(){
       return call('GET','/rest/v1/profiles?id=eq.'+j.user.id+'&select=*');
     }).then(function(rows){
       var p=rows&&rows[0];if(!p||!p.active)throw nerr('Ce compte est désactivé.',403);
+      if(p.locked){ST.lk=ST.lk||{};ST.lk[phone]=1;ST.auth=null;writeSt();var le=nerr('Compte verrouillé par le propriétaire.',423);le.locked=true;throw le}
+      if(ST.lk)delete ST.lk[phone];
       ST.auth.profile=p;
       if(p.role==='seller')return call('POST','/rest/v1/rpc/claim_session',{}).then(function(e){ST.auth.epoch=e;return p});
       ST.auth.epoch=p.epoch;return p;
@@ -1692,6 +1702,7 @@ var Sync=(function(){
       ST.creds[phone]={h:hashPw(pw,'dev'),uid:ST.auth.uid,rt:ST.auth.rt,epoch:ST.auth.epoch,profile:p};writeSt();
       return {user:toUser(p),online:true};
     },function(e){
+      if(e.locked)throw e;
       if(!e.status)return offlineLogin(phone,pw);
       ST.auth=null;
       if(e.status===400||e.status===401||e.status===422)throw nerr('Numéro ou mot de passe incorrect.',400);
@@ -1701,8 +1712,14 @@ var Sync=(function(){
   }
   function offlineLogin(phone,pw){
     var c=ST.creds[phone];
+    if(ST.lk&&ST.lk[phone]){var le=nerr('Compte verrouillé par le propriétaire.',423);le.locked=true;throw le}
     if(c&&c.h===hashPw(pw,'dev')){ST.auth={uid:c.uid,phone:phone,at:null,rt:c.rt,exp:0,epoch:c.epoch,profile:c.profile,offline:true};writeSt();return {user:toUser(c.profile),online:false}}
     throw nerr('Pas de connexion Internet. Une première connexion avec Internet est nécessaire sur cet appareil.',0);
+  }
+  function requestUnlock(phone,pw){
+    return http('POST','/auth/v1/token?grant_type=password',{email:phone+'@interkin.app',password:pw},null,true).then(function(j){
+      return http('POST','/rest/v1/rpc/request_unlock',{},{Authorization:'Bearer '+j.access_token},true)},function(e){
+      if(e.status===400||e.status===401||e.status===422)throw nerr('Numéro ou mot de passe incorrect.',400);throw e});
   }
   function forceOut(m){
     var had=U.user;U.user=null;S.session=null;ST.auth=null;writeSt();resetSale();rawSave();render();
@@ -1719,6 +1736,7 @@ var Sync=(function(){
     if(a.profile.role==='seller')return call('GET','/rest/v1/profiles?id=eq.'+a.uid+'&select=*').then(function(rows){
       var p=rows&&rows[0];
       if(!p||!p.active){forceOut('Votre compte a été désactivé.');throw HALT}
+      if(p.locked){ST.lk=ST.lk||{};ST.lk[a.phone]=1;forceOut('Votre compte a été verrouillé par le propriétaire. Pour vous reconnecter, demandez-lui son autorisation.');throw HALT}
       if(p.epoch!==a.epoch){forceOut('Session fermée : votre compte a été ouvert sur un autre appareil ou fermé par le propriétaire.');throw HALT}
       a.profile=p;S.users=[toUser(p)];rawSave();
     });
@@ -1726,7 +1744,7 @@ var Sync=(function(){
   }
   function profiles(){
     return call('GET','/rest/v1/profiles?select=*&order=created_at.asc').then(function(rows){
-      S.users=rows.filter(function(p){return p.active}).map(toUser);rawSave();return S.users});
+      var sg=JSON.stringify(S.users);S.users=rows.filter(function(p){return p.active}).map(toUser);if(JSON.stringify(S.users)!==sg)needRender=true;rawSave();return S.users});
   }
 
   /* ----- envoi ----- */
@@ -1865,7 +1883,7 @@ var Sync=(function(){
       +'<div class="item"><div class="grow muted">Ventes en attente d’envoi</div><b class="num">'+n+'</b></div>'
       +(rj.length?'<div class="note bad" style="margin-top:8px"><b>'+rj.length+' élément(s) refusé(s) par le serveur</b><div class="small">'+esc(rj[0].k+' : '+rj[0].msg)+'</div></div>':'');
   }
-  var api={ST:function(){return ST},setPin:setPin,login:login,logout:logout,first:first,kick:kick,start:start,init:init,settle:settle,rpc:rpc,profiles:profiles,msg:msg,
+  var api={ST:function(){return ST},setPin:setPin,requestUnlock:requestUnlock,login:login,logout:logout,first:first,kick:kick,start:start,init:init,settle:settle,rpc:rpc,profiles:profiles,msg:msg,
     pend:pendCount,statusHTML:statusHTML,cycle:function(){return cycle()},stockDirty:false,started:false,
     renamePhone:function(o,n){if(ST.creds[o]){ST.creds[n]=ST.creds[o];delete ST.creds[o]}if(ST.auth&&ST.auth.phone===o)ST.auth.phone=n;writeSt()},
     dirtyStock:function(){api.stockDirty=true;kick(400)},
