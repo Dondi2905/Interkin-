@@ -229,7 +229,7 @@ svg.map{background:var(--surface-2);border-radius:8px;border:1px solid var(--lin
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v41',APP_BUILD=39;
+var APP_VER='v43',APP_BUILD=39;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -466,10 +466,10 @@ function doFinalize(res){
   var c=calc();if(c.err){if(res)Sync.rpc('release_points',{p_lid:res.lid}).catch(function(){});toast(c.err,'bad');return}
   if(res&&Math.abs(c.pu-res.pu)>0.004){Sync.rpc('release_points',{p_lid:res.lid}).catch(function(){});toast('Le montant a changé, validez de nouveau.','bad');render();return}
   if(c.pu>0&&!U.online){toast('Hors ligne : points indisponibles.','bad');return}
-  var user=U.user,cust=c.cust,pdv=user.pdvId,no=nextNo(pdv),cogs=0;
+  var user=U.user,cust=c.cust,pdv=user.pdvId,no=nextNo(pdv),cogs=0,UU=saleUses(U.cart,pdv);
   U.cart.forEach(function(i){cogs+=(i.cost||0)*i.qty});
   var sale={id:res?res.sid:'s'+nid(),no:no,ts:Date.now(),pdvId:pdv,role:user.role,sellerId:user.id,sellerName:whoName(user),custId:cust?cust.id:null,custName:cust?cust.name:null,
-    items:U.cart.map(function(i){var pr=prodById(i.id);return {id:i.id,name:i.name,price:i.price,qty:i.qty,cost:i.cost||0,use:lineUse(pr,i.qty,pdv)}}),
+    items:U.cart.map(function(i,ix){return {id:i.id,name:i.name,price:i.price,qty:i.qty,cost:i.cost||0,use:UU[ix]}}),
     total:c.total,pointsUsed:c.pu,cashDue:c.due,cashPaid:c.paid,change:c.change,kept:c.keep,
     cashNet:c.paid-(c.change-c.keep),earned:0,balanceAfter:null,cogs:cogs,profit:c.total-cogs,offline:!U.online,pending:!U.online};
   if(cust){
@@ -500,17 +500,33 @@ function doFinalize(res){
   S.sales.unshift(sale);logEv('sale','Vente N° '+pad(no)+' : '+fmt(sale.total)+' FC');save();resetSale();
   U.tab='sale';render();showTicket(sale,true);
 }
-function packUse(pr,qty,pdv){
-  var t=((pr&&pr.pack)||[]).filter(function(x){return x.up>0}).sort(function(a,b){return a.up-b.up});
-  if(pdv&&t.length>1){var av=t.filter(function(x){var g=ingById(x.ing),q=g&&ist(g,pdv);return !q||q.cur>0});if(av.length&&av.length<t.length)t=av}
+function packBags(tiers,qty,pdv){
+  var t=tiers.filter(function(x){return x.up>0}).sort(function(a,b){return a.up-b.up});
   if(!t.length||!(qty>0))return [];
+  if(pdv&&t.length>1){var av=t.filter(function(x){var g=ingById(x.ing),q=g&&ist(g,pdv);return !q||q.cur>0});if(av.length&&av.length<t.length)t=av}
   var L=t[t.length-1],full=Math.floor(qty/L.up),rem=qty-full*L.up,bags={};
   if(full)bags[L.ing]=full;
   if(rem>0){var x=t.find(function(y){return rem<=y.up});bags[x.ing]=(bags[x.ing]||0)+1}
-  return Object.keys(bags).map(function(k){return {ing:k,q:r6(bags[k]/qty)}});
+  return Object.keys(bags).map(function(k){return {ing:k,bags:bags[k]}});
 }
-function lineUse(pr,qty,pdv){return ((pr&&pr.recipe)||[]).map(function(r){return {ing:r.ing,q:r.g}}).concat(packUse(pr,qty,pdv))}
-function stockKeys(items,pdv){var k=[];items.forEach(function(i){k.push('stock/p:'+i.id+':'+pdv);var pr=prodById(i.id);((pr&&pr.recipe||[]).concat((pr&&pr.pack)||[])).concat(pr?[]:(i.use||[]).map(function(u){return {ing:u.ing}})).forEach(function(r){k.push('istock/i:'+r.ing+':'+pdv)})});return k}
+function lineUse(pr){return ((pr&&pr.recipe)||[]).map(function(r){return {ing:r.ing,q:r.g}})}
+/* l'emballage se calcule sur le total de pains de la vente, tous parfums confondus (produits ayant les mêmes paliers) */
+function saleUses(cart,pdv){
+  var uses=cart.map(function(i){return lineUse(prodById(i.id))}),gr={};
+  cart.forEach(function(i,ix){var pr=prodById(i.id),pk=(pr&&pr.pack)||[];if(!pk.length)return;
+    var key=JSON.stringify(pk.map(function(x){return [x.ing,x.up]}).sort()),g=gr[key]=gr[key]||{tiers:pk,qty:0,first:ix};g.qty+=i.qty});
+  var ig={};
+  cart.forEach(function(i,ix){uses[ix].forEach(function(u){var g=ingById(u.ing);if(!g||!(g.pack&&g.pack.length))return;
+    var o=ig[g.id]=ig[g.id]||{g:g,qty:0,first:ix,fq:i.qty};o.qty+=i.qty*u.q})});
+  Object.keys(ig).forEach(function(k){var o=ig[k];
+    packBags(o.g.pack,Math.ceil(o.qty-1e-9),pdv).forEach(function(b){uses[o.first].push({ing:b.ing,q:r6(b.bags/o.fq)})})});
+  Object.keys(gr).forEach(function(k){var g=gr[k],fq=cart[g.first].qty;
+    packBags(g.tiers,g.qty,pdv).forEach(function(b){uses[g.first].push({ing:b.ing,q:r6(b.bags/fq)})})});
+  return uses;
+}
+function stockKeys(items,pdv){var k=[];items.forEach(function(i){k.push('stock/p:'+i.id+':'+pdv);var pr=prodById(i.id),L=((pr&&pr.recipe||[]).concat((pr&&pr.pack)||[])).concat(pr?[]:(i.use||[]).map(function(u){return {ing:u.ing}}));
+    (pr&&pr.recipe||[]).forEach(function(r){var g=ingById(r.ing);if(g&&g.pack)L=L.concat(g.pack)});
+    L.forEach(function(r){k.push('istock/i:'+r.ing+':'+pdv)})});return k}
 function resetSale(){U.cart=[];U.client=undefined;U.cq='';U.usePoints=false;U.unlocked=false;U.pts='';U.cash='';U.keep=false}
 
 function breakdown(id){
@@ -991,7 +1007,7 @@ function packLabels(){
   M.pack.forEach(function(r,i){var el=$('#pl'+i);if(el)el.textContent=m[i]||''});
 }
 function packHTML(){
-  var opts=function(sel){return S.ingredients.map(function(g){return '<option value="'+g.id+'"'+(g.id===sel?' selected':'')+'>'+esc(g.name)+'</option>'}).join('')};
+  var opts=function(sel){return S.ingredients.filter(function(g){return g.id!==M.ingPack}).map(function(g){return '<option value="'+g.id+'"'+(g.id===sel?' selected':'')+'>'+esc(g.name)+'</option>'}).join('')};
   if(!S.ingredients.length)return '<div class="hint">Créez d’abord l’emballage comme intrant (Stock → Nouvel intrant).</div>';
   return M.pack.map(function(r,i){return '<div class="rrow" style="margin-top:6px"><select class="sel" data-c="psel" data-idx="'+i+'" aria-label="Emballage">'+opts(r.ing)+'</select>'
     +'<input class="inp" inputmode="numeric" data-i="pu" data-idx="'+i+'" value="'+esc(r.up||'')+'" placeholder="jusqu’à (unités)" aria-label="Jusqu’à combien d’unités">'
@@ -1036,8 +1052,8 @@ function stockView(){
      var s=ist(g,pdv),lc=lastCount(g.id,pdv);
      var lcChip=lc?'<span class="chip '+(lc.ok?'good':'bad')+'">Écart '+(lc.pct>0?'+':'')+dec(lc.pct)+' %'+(lc.ok?' · dans la marge':' · hors marge')+'</span>':'';
      return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(g.name)+'</div>'
-       +(s?'<div class="num" style="font:600 18px var(--font-head)">'+qf(g,s.cur)+'</div><div class="small muted">Consommé depuis le dernier comptage : '+qf(g,s.used)+'</div><div style="margin-top:6px">'+lcChip+'</div>':'<div class="small muted">Non suivi dans ce point de vente</div>')+'</div>'
-       +(owner?'<div class="stack" style="gap:6px"><button class="btn sm" data-a="addStock" data-kind="i" data-id="'+g.id+'">+ Ajouter</button>'+(s?'<button class="btn sm" data-a="countIng" data-id="'+g.id+'">Compter</button><button class="btn sm" style="font-size:12px;padding:4px 10px" data-a="cntFlag" data-id="'+g.id+'">'+(g.cnt?'✓ Compté à la clôture':'Compter à la clôture')+'</button>':'')+'<button class="btn sm danger" data-a="delIngAsk" data-id="'+g.id+'">Supprimer</button></div>':'')+'</div>'}).join('')+'</div>';
+       +(s?'<div class="num" style="font:600 18px var(--font-head)">'+qf(g,s.cur)+'</div><div class="small muted">Consommé depuis le dernier comptage : '+qf(g,s.used)+'</div><div style="margin-top:6px">'+lcChip+'</div>':'<div class="small muted">Non suivi dans ce point de vente</div>')+(owner?packChips(g):'')+'</div>'
+       +(owner?'<div class="stack" style="gap:6px"><button class="btn sm" data-a="addStock" data-kind="i" data-id="'+g.id+'">+ Ajouter</button>'+(s?'<button class="btn sm" data-a="countIng" data-id="'+g.id+'">Compter</button><button class="btn sm" style="font-size:12px;padding:4px 10px" data-a="cntFlag" data-id="'+g.id+'">'+(g.cnt?'✓ Compté à la clôture':'Compter à la clôture')+'</button>':'')+'<button class="btn sm" style="font-size:12px;padding:4px 10px" data-a="ingPackOpen" data-id="'+g.id+'">'+(g.pack&&g.pack.length?'Emballage ✓':'Emballage')+'</button><button class="btn sm danger" data-a="delIngAsk" data-id="'+g.id+'">Supprimer</button></div>':'')+'</div>'}).join('')+'</div>';
   var mv=S.moves.filter(function(m){return m.pdv===pdv}).slice(0,5);
   if(mv.length)h+='<h2 class="h">Derniers ajouts</h2><div class="card">'+mv.map(function(m){var o=m.kind==='p'?prodById(m.id):ingById(m.id);return '<div class="item"><div class="grow small">'+esc(o?o.name:'?')+'<div class="muted">'+dstr(m.ts)+' '+tstr(m.ts)+'</div></div><b class="good num">+'+qn(m.qty,2)+(m.kind==='i'?' '+unit(o):'')+'</b></div>'}).join('')+'</div>';
   return h;
@@ -1427,8 +1443,8 @@ function startSession(u,silent){
   save();render();window.scrollTo(0,0);
 }
 function logoutNow(){if(U.user)logEv('logout','Déconnexion');U.user=null;S.session=null;resetSale();save();render();if(SYNC_ON)Sync.logout()}
-var STOCK_ACT={scConfirm:1,delIngDo:1,saveMulti:1,addStock:1,saveStock:1,saveProd:1,delProd:1,saveIng:1,saveCount:1,countIng:1};
-var OWNER_ONLY={scOpen:1,scReview:1,scBack:1,scConfirm:1,cntFlag:1,ctAdd:1,ctDel:1,smFill:1,delIngAsk:1,delIngDo:1,stockMulti:1,saveMulti:1,stockItem:1,stockGo:1,slowToggle:1,lockAsk:1,lockDo:1,unlockSeller:1,shiftDetail:1,editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
+var STOCK_ACT={ingPackSave:1,scConfirm:1,delIngDo:1,saveMulti:1,addStock:1,saveStock:1,saveProd:1,delProd:1,saveIng:1,saveCount:1,countIng:1};
+var OWNER_ONLY={ingPackOpen:1,ingPackSave:1,scOpen:1,scReview:1,scBack:1,scConfirm:1,cntFlag:1,ctAdd:1,ctDel:1,smFill:1,delIngAsk:1,delIngDo:1,stockMulti:1,saveMulti:1,stockItem:1,stockGo:1,slowToggle:1,lockAsk:1,lockDo:1,unlockSeller:1,shiftDetail:1,editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
 
 /* rendu général */
 function tabView(){
@@ -1664,7 +1680,7 @@ var A={
   doReset:function(d){var r=S.resets.find(function(x){return x.id===d.id});if(!r||r.status!=='approved'||!resetActive(r)){toast('Autorisation expirée ou absente.');closeModal();render();return}closeModal();resetPinFlow(r.custId,r.id)},
   /* produits */
   newProd:function(){openModal(prodFormHTML());M.recipe=[];M.pack=[];M.batch='';$('#recipeBox').innerHTML=recipeHTML();$('#packBox').innerHTML=packHTML()},
-  padd:function(){M.pack.push({ing:S.ingredients[0].id,up:''});$('#packBox').innerHTML=packHTML();packLabels()},
+  padd:function(){var f=S.ingredients.find(function(g){return g.id!==M.ingPack});M.pack.push({ing:(f||S.ingredients[0]).id,up:''});$('#packBox').innerHTML=packHTML();packLabels()},
   pdel:function(d){M.pack.splice(+d.idx,1);$('#packBox').innerHTML=packHTML();packLabels()},
   editProd:function(d){var p=prodById(d.id);openModal(prodFormHTML(p));M.batch=p.batch?String(p.batch):'';
     M.recipe=(p.recipe||[]).map(function(r){var lotRow=r.mode==='l'&&r.raw!=null;return {ing:r.ing,mode:lotRow?'l':'u',g:String(lotRow?r.raw:r.g).replace('.',',')}});$('#recipeBox').innerHTML=recipeHTML();M.pack=(p.pack||[]).map(function(x){return {ing:x.ing,up:String(x.up)}});$('#packBox').innerHTML=packHTML();packLabels()},
@@ -1716,6 +1732,15 @@ var A={
     var mo=d.kind==='p'?prodById(d.id):ingById(d.id);logEv('stock','Stock ajouté : '+(mo?mo.name:'?')+' +'+q);S.moves.unshift({ts:Date.now(),kind:d.kind,id:d.id,pdv:pdv,qty:q});S.moves=S.moves.slice(0,30);save();closeModal();toast('Stock ajouté.');render();
   },
   newIng:function(){openModal(newIngHTML())},
+  ingPackOpen:function(d){var g=ingById(d.id);if(!g)return;
+    openModal('<h3>Emballage de « '+esc(g.name)+' »</h3><div class="hint">L’emballage se calcule sur le total de « '+esc(g.name)+' » utilisé dans la vente, quel que soit le produit. Indiquez la limite haute de chaque emballage : petit = 1, grand = 4. 5 unités = 1 grand + 1 petit. Si un emballage est épuisé, l’application utilise l’autre.</div><div id="packBox"></div>'
+     +'<div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="ingPackSave" data-id="'+g.id+'">Enregistrer</button></div>');
+    M.ingPack=g.id;M.pack=(g.pack||[]).map(function(x){return {ing:x.ing,up:String(x.up)}});$('#packBox').innerHTML=packHTML();packLabels()},
+  ingPackSave:function(d){var g=ingById(d.id);if(!g||!M.pack)return;
+    var pk=M.pack.map(function(x){return {ing:x.ing,up:parseInt(x.up,10)}}).filter(function(x){return x.up>0});
+    if(M.pack.length&&pk.length!==M.pack.length){toast('Indiquez « jusqu’à » combien d’unités pour chaque emballage.');return}
+    if(new Set(pk.map(function(x){return x.up})).size!==pk.length){toast('Deux emballages ont la même limite.');return}
+    if(pk.length)g.pack=pk;else delete g.pack;save();closeModal();render();toast(pk.length?'Emballage enregistré.':'Emballage retiré.')},
   saveIng:function(){
     var name=$('#ign').value.trim();if(!name){toast('Saisissez le nom de l’intrant.');return}
     var un=newUnit($('#igu').value,$('#igl').value);
@@ -1724,7 +1749,7 @@ var A={
     S.ingredients.push(g);save();closeModal();toast('Intrant créé.');render();
   },
   delIngAsk:function(d){var g=ingById(d.id);if(!g)return;
-    var used=S.products.filter(function(p){return (p.recipe||[]).concat(p.pack||[]).some(function(r){return r.ing===g.id})});
+    var used=S.products.filter(function(p){return (p.recipe||[]).concat(p.pack||[]).some(function(r){return r.ing===g.id})}).concat(S.ingredients.filter(function(x){return (x.pack||[]).some(function(r){return r.ing===g.id})}));
     if(used.length){openModal('<h3>Suppression impossible</h3><p class="muted">« '+esc(g.name)+' » est utilisé dans la recette de '+used.length+' produit'+(used.length>1?'s':'')+' :</p><div class="card">'+used.map(function(p){return '<div class="item"><div class="grow">'+esc(p.name)+'</div></div>'}).join('')+'</div><p class="hint" style="margin-top:8px">Retirez d’abord cet intrant de ces recettes (Produits, Modifier), puis recommencez.</p><button class="btn primary wide" style="margin-top:12px" data-a="closeModal">Compris</button>');return}
     openModal('<h3>Supprimer l’intrant</h3><p class="muted">Supprimer « '+esc(g.name)+' » et son stock dans tous les points de vente ? Cette action est définitive.</p><div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn danger grow" data-a="delIngDo" data-id="'+g.id+'">Supprimer</button></div>')},
   delIngDo:function(d){var g=ingById(d.id);if(!g)return;
