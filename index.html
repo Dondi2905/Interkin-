@@ -995,7 +995,7 @@ function stockView(){
     var s=st(p,pdv);
     return '<div class="item"><div class="grow"><div style="font-weight:600;overflow-wrap:anywhere">'+esc(p.name)+'</div>'+(owner?'<div class="small muted">Achat '+fmt(p.cost||0)+' FC</div>':'')+'</div>'
       +(s===null?'<span class="chip">Non suivi</span>':'<span class="chip '+(s<=LOW?'bad':'good')+'">'+s+' unité(s)'+(s<=LOW?' · stock bas':'')+'</span>')
-      +(owner?'<button class="btn sm" data-a="addStock" data-kind="p" data-id="'+p.id+'">+ Stock</button>':'')+'</div>'}).join('')+'</div>';
+      +(owner?'<button class="btn sm" data-a="addStock" data-kind="p" data-id="'+p.id+'">+ Stock</button> <button class="btn sm" data-a="cntFlag" data-kind="p" data-id="'+p.id+'">'+(p.cnt?'✓ À chaque clôture':'Compter à la clôture')+'</button>':'')+'</div>'}).join('')+'</div>';
   h+='<div class="row sp" style="margin-top:22px"><h2 class="h" style="margin:0 2px">Intrants</h2>'+(owner?'<button class="btn sm" data-a="newIng">Nouvel intrant</button>':'')+'</div>'
    +'<p class="hint" style="margin:8px 0 10px">Marge d’erreur acceptée : '+S.margin+' %. Comptez le stock réel pour la vérifier.</p><div class="card">'
    +S.ingredients.map(function(g){
@@ -1270,6 +1270,21 @@ function scList(h){
   var all=S.ingredients.filter(function(g){return ist(g,h.pdvId)}),fl=all.filter(function(g){return g.cnt});
   return fl.length?fl:all;
 }
+function scProds(h){
+  var all=S.products.filter(function(p){return st(p,h.pdvId)!==null}),fl=all.filter(function(p){return p.cnt});
+  return fl.length?fl:all;
+}
+function scCalcP(h,p,cnt){
+  var T=h.closeTs||Date.now(),ls=0,la=0;
+  S.sales.forEach(function(x){if(x.pdvId!==h.pdvId||x.cancelled||x.ts<=T)return;(x.items||[]).forEach(function(it){if(it.id===p.id)ls+=it.qty})});
+  S.moves.forEach(function(m){if(m.kind==='p'&&m.id===p.id&&m.pdv===h.pdvId&&m.ts>T)la+=m.qty});
+  var exp=(st(p,h.pdvId)||0)+ls-la,diff=cnt-exp;
+  return {kind:'p',p:p,cnt:cnt,exp:exp,diff:diff,ok:diff===0,ls:ls,la:la};
+}
+function scChip(r){
+  if(r.kind==='p')return '<span class="chip '+(r.ok?'good':'bad')+'">'+(r.ok?'Juste':(r.diff>0?'+':'')+r.diff+' unité'+(Math.abs(r.diff)>1?'s':''))+'</span>';
+  return '<span class="chip '+(r.ok?'good':'bad')+'">'+(r.pct>0?'+':'')+dec(r.pct)+' %</span>';
+}
 function scCalc(h,g,cnt){
   var s=ensureIng(g,h.pdvId),T=h.closeTs||Date.now(),lu=0,la=0;
   S.sales.forEach(function(x){if(x.pdvId!==h.pdvId||x.cancelled||x.ts<=T)return;(x.items||[]).forEach(function(it){(it.use||[]).forEach(function(u){if(u.ing===g.id)lu+=it.qty*u.q})})});
@@ -1293,13 +1308,14 @@ function scHTML(h,v){
    +'<label class="lbl" for="scby">Compté par</label><select id="scby" class="sel" data-c="scby">'+opts+'</select><input id="scbo" class="inp" style="margin-top:6px;'+(by==='__other'?'':'display:none')+'" placeholder="Nom de la personne" maxlength="40" value="'+esc(v.other||'')+'">'
    +'<div class="hint" style="margin-top:10px">Saisissez les quantités comptées à la clôture. Laissez vide ce qui n’a pas été compté.</div><div class="card" style="margin-top:8px;max-height:46vh;overflow:auto">'
    +scList(h).map(function(g){return '<div class="item"><div class="grow"><div style="font-weight:600">'+esc(g.name)+'</div><div class="small muted">en '+unitName(unit(g))+'</div></div><input class="inp sci" style="width:110px" inputmode="decimal" placeholder="0" data-ing="'+g.id+'" value="'+esc((v.vals&&v.vals[g.id])||'')+'" aria-label="Quantité comptée de '+esc(g.name)+'"></div>'}).join('')+'</div>'
+   +(scProds(h).length?'<div class="hint" style="margin-top:10px">Produits (en unités entières)</div><div class="card" style="margin-top:8px">'+scProds(h).map(function(q){return '<div class="item"><div class="grow"><div style="font-weight:600">'+esc(q.name)+'</div><div class="small muted">unités</div></div><input class="inp sci" style="width:110px" inputmode="numeric" placeholder="0" data-prod="'+q.id+'" value="'+esc((v.vals&&v.vals[q.id])||'')+'" aria-label="Quantité comptée de '+esc(q.name)+'"></div>'}).join('')+'</div>':'')
    +'<div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Plus tard</button><button class="btn primary grow" data-a="scReview" data-id="'+h.id+'">Vérifier</button></div>';
 }
 function scDoneHTML(h){
-  var c=h.sc;return '<div class="sub-h">Comptage du stock</div><div class="small muted" style="margin-bottom:6px">Compté par '+esc(c.by)+' · saisi le '+dstr(c.ts)+' à '+tstr(c.ts)+'</div><div class="card">'+c.rows.map(function(r){return '<div class="item"><div class="grow"><div style="font-weight:600">'+esc(r.name)+'</div><div class="small muted num">Compté '+qn(r.cnt,2)+' · prévu '+qn(r.theo,2)+' consommé</div></div><span class="chip '+(r.ok?'good':'bad')+'">'+(r.pct>0?'+':'')+dec(r.pct)+' %</span></div>'}).join('')+'</div>';
+  var c=h.sc;return '<div class="sub-h">Comptage du stock</div><div class="small muted" style="margin-bottom:6px">Compté par '+esc(c.by)+' · saisi le '+dstr(c.ts)+' à '+tstr(c.ts)+'</div><div class="card">'+c.rows.map(function(r){return '<div class="item"><div class="grow"><div style="font-weight:600">'+esc(r.name)+'</div><div class="small muted num">'+(r.kind==='p'?'Compté '+r.cnt+' · prévu '+r.exp+' unités':'Compté '+qn(r.cnt,2)+' · prévu '+qn(r.theo,2)+' consommé')+'</div></div>'+scChip(r)+'</div>'}).join('')+'</div>';
 }
 function finishShift(h,counted,forced){
-  h.closeTs=Date.now();h.expected=expectedCash(h);h.counted=forced?null:counted;h.diff=forced?null:r2(counted-h.expected);h.forced=!!forced;h.state='closed';if(scList(h).length)h.sc={st:'p'};
+  h.closeTs=Date.now();h.expected=expectedCash(h);h.counted=forced?null:counted;h.diff=forced?null:r2(counted-h.expected);h.forced=!!forced;h.state='closed';if(scList(h).length||scProds(h).length)h.sc={st:'p'};
   logEv('shift_close','Clôture de caisse de '+h.name+' : attendu '+fmt(h.expected)+' FC'+(forced?' (clôture forcée)':', compté '+fmt(counted)+' FC, écart '+fmt(h.diff)+' FC'));
 }
 function liveCashInner(){
@@ -1479,26 +1495,31 @@ var A={
   scReview:function(d){
     var h=S.shifts.find(function(x){return x.id===d.id});if(!h||!h.sc||h.sc.st!=='p')return;
     var sel=$('#scby').value,other=($('#scbo')||{}).value||'',vals={},rows=[],bad=false;
-    document.querySelectorAll('.sci').forEach(function(el){var raw=el.value.trim();vals[el.dataset.ing]=raw;if(!raw)return;var q=parseDec(raw);if(isNaN(q)||q<0){bad=true;return}rows.push(scCalc(h,ingById(el.dataset.ing),q))});
+    document.querySelectorAll('.sci').forEach(function(el){var raw=el.value.trim(),pr=el.dataset.prod;vals[pr||el.dataset.ing]=raw;if(!raw)return;
+      if(pr){if(!/^\d+$/.test(raw)){bad=true;return}rows.push(scCalcP(h,prodById(pr),parseInt(raw,10)));return}
+      var q=parseDec(raw);if(isNaN(q)||q<0){bad=true;return}rows.push(scCalc(h,ingById(el.dataset.ing),q))});
     if(sel==='__other'&&!other.trim()){toast('Indiquez le nom de la personne qui a compté.');return}
     if(bad){toast('Vérifiez les quantités saisies (nombres positifs).','bad');return}
     if(!rows.length){toast('Saisissez au moins une quantité.');return}
     var by=sel==='__me'?(U.user.name||'Propriétaire')+' (propriétaire)':sel==='__other'?other.trim():sel;
     M.sc={id:h.id,by:by,vals:vals,sel:sel,other:other,rows:rows};
-    $('.sheet').innerHTML='<h3>Vérifiez avant de valider</h3><div class="muted small">Compté par '+esc(by)+'</div><div class="card" style="margin-top:10px;max-height:50vh;overflow:auto">'+rows.map(function(r){return '<div class="item"><div class="grow"><div style="font-weight:600">'+esc(r.g.name)+'</div><div class="small muted num">Compté '+qf(r.g,r.cnt)+' · consommé prévu '+qf(r.g,r.theo)+'</div></div><span class="chip '+(r.ok?'good':'bad')+'">'+(r.pct>0?'+':'')+dec(r.pct)+' %</span></div>'}).join('')+'</div>'
+    $('.sheet').innerHTML='<h3>Vérifiez avant de valider</h3><div class="muted small">Compté par '+esc(by)+'</div><div class="card" style="margin-top:10px;max-height:50vh;overflow:auto">'+rows.map(function(r){return '<div class="item"><div class="grow"><div style="font-weight:600">'+esc((r.p||r.g).name)+'</div><div class="small muted num">'+(r.kind==='p'?'Compté '+r.cnt+' · prévu '+r.exp+' unités':'Compté '+qf(r.g,r.cnt)+' · consommé prévu '+qf(r.g,r.theo))+'</div></div>'+scChip(r)+'</div>'}).join('')+'</div>'
      +'<div class="row" style="margin-top:14px"><button class="btn grow" data-a="scBack" data-id="'+h.id+'">Corriger</button><button class="btn primary grow" data-a="scConfirm" data-id="'+h.id+'">Valider</button></div>'},
   scBack:function(d){var h=S.shifts.find(function(x){return x.id===d.id});if(!h||!M.sc)return;$('.sheet').innerHTML=scHTML(h,{vals:M.sc.vals,by:M.sc.sel,other:M.sc.other})},
   scConfirm:function(d){
     var h=S.shifts.find(function(x){return x.id===d.id});if(!h||!h.sc||h.sc.st!=='p'||!M.sc||M.sc.id!==h.id)return;
-    var rows=M.sc.rows.map(function(r){return scCalc(h,r.g,r.cnt)});
-    rows.forEach(function(r){var st=ensureIng(r.g,h.pdvId);
+    var rows=M.sc.rows.map(function(r){return r.kind==='p'?scCalcP(h,r.p,r.cnt):scCalc(h,r.g,r.cnt)});
+    rows.forEach(function(r){
+      if(r.kind==='p'){r.p.stock=r.p.stock||{};r.p.stock[h.pdvId]=Math.max(0,r.cnt-r.ls+r.la);
+        logEv('count','Comptage de '+r.p.name+' ('+h.name+', par '+M.sc.by+') : '+(r.ok?'juste':(r.diff>0?'+':'')+r.diff+' unité(s) — HORS MARGE'));return}
+      var st2=ensureIng(r.g,h.pdvId);
       S.counts.unshift({id:'k'+nid(),ts:Date.now(),ingId:r.g.id,pdvId:h.pdvId,theo:r.theo,actual:r.actual,pct:r.pct,ok:r.ok,by:M.sc.by,shiftId:h.id,seller:h.name,cts:h.closeTs});
-      st.open=r.cnt;st.added=r.la;st.used=r.lu;st.cur=r6(r.cnt+r.la-r.lu);
+      st2.open=r.cnt;st2.added=r.la;st2.used=r.lu;st2.cur=r6(r.cnt+r.la-r.lu);
       logEv('count','Comptage de '+r.g.name+' ('+h.name+', par '+M.sc.by+') : écart '+dec(r.pct)+' %'+(r.ok?'':' — HORS MARGE'))});
     S.counts=S.counts.slice(0,200);
-    h.sc={st:'d',by:M.sc.by,ts:Date.now(),rows:rows.map(function(r){return {ing:r.g.id,name:r.g.name,cnt:r.cnt,theo:r.theo,pct:r.pct,ok:r.ok}})};
+    h.sc={st:'d',by:M.sc.by,ts:Date.now(),rows:rows.map(function(r){return r.kind==='p'?{kind:'p',ing:r.p.id,name:r.p.name,cnt:r.cnt,exp:r.exp,diff:r.diff,ok:r.ok}:{kind:'i',ing:r.g.id,name:r.g.name,cnt:r.cnt,theo:r.theo,pct:r.pct,ok:r.ok}})};
     var bad=rows.filter(function(r){return !r.ok}).length;M.sc=null;save();closeModal();render();toast(bad?bad+' intrant(s) hors marge pour '+h.name+'.':'Comptage enregistré, tout est dans la marge.',bad?'bad':undefined)},
-  cntFlag:function(d){var g=ingById(d.id);if(!g)return;if(g.cnt)delete g.cnt;else g.cnt=true;save();render()},
+  cntFlag:function(d){var g=d.kind==='p'?prodById(d.id):ingById(d.id);if(!g)return;if(g.cnt)delete g.cnt;else g.cnt=true;save();render()},
   ctAdd:function(){var n=(($('#ctn')||{}).value||'').trim();if(!n){toast('Saisissez un nom.');return}if(S.counters.indexOf(n)>=0){toast('Ce nom existe déjà.');return}S.counters.push(n);save();render()},
   ctDel:function(d){S.counters.splice(+d.idx,1);save();render()},
   stockItem:function(d){openModal(stockItemHTML(d.kind,d.id))},
