@@ -1209,14 +1209,23 @@ function cashAdminView(){
   h+='<h2 class="h">Dernières clôtures</h2><div class="card">'+(cl.length?cl.slice(0,15).map(function(x){return shiftRow(x,1)}).join(''):'<div class="muted">Aucune clôture pour le moment.</div>')+'</div>';
   return h;
 }
-function staffView(){
-  var h=lockReqBanner()+'<h2 class="h">Mon compte</h2><div class="card"><div class="item"><div class="grow"><div style="font-weight:600">Propriétaire</div><div class="small muted num">'+esc((userById(U.user.id)||{}).phone||'')+'</div></div><div class="stack"><button class="btn sm" data-a="phoneAsk" data-id="'+U.user.id+'">Changer mon numéro</button><button class="btn sm" data-a="pwSeller" data-id="'+U.user.id+'">Changer mon mot de passe</button></div></div></div>';
-  h+='<h2 class="h">Comptes des vendeurs</h2>';
+function sellerMatch(u){var n=norm(U.sq||''),d=digits(U.sq||''),f=U.sf||'all';
+  if(n&&norm(u.name).indexOf(n)<0&&!(d&&digits(u.phone).indexOf(d)>=0))return false;
+  if(f==='open')return !!openShift(u.id);if(f==='locked')return !!u.locked;return true}
+function sellerListHTML(){
+  var h='',filt=!!(U.sq||(U.sf&&U.sf!=='all'));
   S.pdvs.forEach(function(pd){
-    var us=S.users.filter(function(u){return u.role==='seller'&&u.pdvId===pd.id});
+    var us=S.users.filter(function(u){return u.role==='seller'&&u.pdvId===pd.id&&sellerMatch(u)});if(filt&&!us.length)return;
     h+='<div class="card" style="margin-top:12px"><div class="sub-h" style="margin-top:0">PDV '+esc(pd.name)+'</div>'+(us.length?us.map(function(u){var sh=openShift(u.id);
       return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(u.name)+'</div><div class="small muted num">'+esc(u.phone)+' · '+(u.shift==='matin'?'matin':'soir')+'</div><div class="small '+(sh?'good':'muted')+'">'+(sh?'Service ouvert depuis '+tstr(sh.openTs):'Hors service')+'</div>'+(u.locked?'<div class="small bad"><b>Verrouillé</b>'+(u.unlockReq?' · demande de reconnexion à '+tstr(Date.parse(u.unlockReq)):' · aucune demande')+'</div>':'')+'</div><div class="stack"><button class="btn sm" data-a="pwSeller" data-id="'+u.id+'">Mot de passe</button><button class="btn sm" data-a="phoneAsk" data-id="'+u.id+'">Numéro</button>'+(SYNC_ON?(u.locked?'<button class="btn sm primary" data-a="unlockSeller" data-id="'+u.id+'">Autoriser la reconnexion</button>':'<button class="btn sm" data-a="forceOutSeller" data-id="'+u.id+'">Déconnecter</button><button class="btn sm" data-a="lockAsk" data-id="'+u.id+'">Verrouiller</button>'):'')+'<button class="btn sm danger" data-a="delSeller" data-id="'+u.id+'">Supprimer</button></div></div>'}).join(''):'<div class="muted">Aucun vendeur.</div>')+'</div>';
   });
+  if(filt&&!h)h='<div class="note" style="margin-top:12px">Aucun vendeur ne correspond.</div>';
+  return h}
+function staffView(){
+  var h=lockReqBanner()+'<h2 class="h">Mon compte</h2><div class="card"><div class="item"><div class="grow"><div style="font-weight:600">Propriétaire</div><div class="small muted num">'+esc((userById(U.user.id)||{}).phone||'')+'</div></div><div class="stack"><button class="btn sm" data-a="phoneAsk" data-id="'+U.user.id+'">Changer mon numéro</button><button class="btn sm" data-a="pwSeller" data-id="'+U.user.id+'">Changer mon mot de passe</button></div></div></div>';
+  var sf=U.sf||'all',chip=function(k,l){return '<button class="btn sm'+(sf===k?' primary':'')+'" data-a="sfilter" data-v="'+k+'">'+l+'</button>'};
+  h+='<h2 class="h">Comptes des vendeurs</h2><input id="sq" type="search" class="inp" data-i="sq" autocomplete="off" enterkeyhint="done" placeholder="Rechercher un vendeur (nom ou numéro)" aria-label="Rechercher un vendeur" value="'+esc(U.sq||'')+'">'
+   +'<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap" id="sellerChips">'+chip('all','Tous')+chip('open','Service ouvert')+chip('locked','Verrouillés')+'</div><div id="sellerList">'+sellerListHTML()+'</div>';
   h+='<h2 class="h">Créer un compte vendeur</h2><div class="card"><label class="lbl" for="nsn">Nom</label><input id="nsn" class="inp" maxlength="40">'
    +'<label class="lbl" for="nsp">Numéro de téléphone (identifiant)</label><input id="nsp" class="inp" inputmode="tel">'
    +'<label class="lbl" for="nspw">Mot de passe (6 caractères minimum)</label>'+pwField('nspw')+''
@@ -1322,6 +1331,7 @@ var A={
     if(!btn.dataset.ok){btn.dataset.ok='1';btn.textContent='Confirmer';return}
     if(SYNC_ON){Sync.rpc('delete_user',{p_id:u.id}).then(function(){logEv('seller_del','Compte vendeur supprimé : '+u.name);save();return Sync.profiles()}).then(function(){render();toast('Compte supprimé.')}).catch(function(er){toast(Sync.msg(er),'bad')});return}
     S.users=S.users.filter(function(x){return x.id!==u.id});logEv('seller_del','Compte vendeur supprimé : '+u.name);save();render();toast('Compte supprimé.')},
+  sfilter:function(d){U.sf=d.v;$('#sellerList').innerHTML=sellerListHTML();var c=$('#sellerChips');if(c)c.querySelectorAll('[data-a=sfilter]').forEach(function(b){b.classList.toggle('primary',b.dataset.v===U.sf)})},
   askUnlock:function(){var ph=digits(($('#lph')||{}).value),pw=($('#lpw')||{}).value||'';if(!ph||!pw){toast('Saisissez votre numéro et votre mot de passe.');return}
     Sync.requestUnlock(ph,pw).then(function(){closeModal();toast('Demande envoyée au propriétaire. Réessayez après son autorisation.')}).catch(function(er){toast(Sync.msg(er),'bad')})},
   lockAsk:function(d){var u=userById(d.id);if(!u)return;openModal('<h3>Déconnecter et verrouiller</h3><p class="muted">'+esc(u.name)+' sera déconnecté tout de suite et ne pourra plus se reconnecter sans votre autorisation, même avec le bon mot de passe.</p><div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn danger grow" data-a="lockDo" data-id="'+u.id+'">Verrouiller</button></div>')},
@@ -1552,6 +1562,7 @@ document.addEventListener('click',function(e){
 });
 var I={
   pq:function(t){U.pq=t.value;$('#prodBox').innerHTML=prodHTML()},
+  sq:function(t){U.sq=t.value;$('#sellerList').innerHTML=sellerListHTML()},
   cq:function(t){U.cq=t.value;$('#cres').innerHTML=resultsHTML(U.cq,true)},
   cl:function(t){U.cl=t.value;$('#clientList').innerHTML=clientListHTML()},
   rs:function(t){var n=norm(t.value),r=n?S.customers.filter(function(c){return norm(c.name).indexOf(n)>=0}).slice(0,5):[];
