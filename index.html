@@ -467,7 +467,7 @@ function doFinalize(res){
   var user=U.user,cust=c.cust,pdv=user.pdvId,no=nextNo(pdv),cogs=0;
   U.cart.forEach(function(i){cogs+=(i.cost||0)*i.qty});
   var sale={id:res?res.sid:'s'+nid(),no:no,ts:Date.now(),pdvId:pdv,role:user.role,sellerId:user.id,sellerName:whoName(user),custId:cust?cust.id:null,custName:cust?cust.name:null,
-    items:U.cart.map(function(i){var pr=prodById(i.id);return {id:i.id,name:i.name,price:i.price,qty:i.qty,cost:i.cost||0,use:((pr&&pr.recipe)||[]).map(function(r){return {ing:r.ing,q:r.g}})}}),
+    items:U.cart.map(function(i){var pr=prodById(i.id);return {id:i.id,name:i.name,price:i.price,qty:i.qty,cost:i.cost||0,use:lineUse(pr,i.qty,pdv)}}),
     total:c.total,pointsUsed:c.pu,cashDue:c.due,cashPaid:c.paid,change:c.change,kept:c.keep,
     cashNet:c.paid-(c.change-c.keep),earned:0,balanceAfter:null,cogs:cogs,profit:c.total-cogs,offline:!U.online,pending:!U.online};
   if(cust){
@@ -489,16 +489,26 @@ function doFinalize(res){
     sale.balanceAfter=balance(cust.id);
   }
   /* stock des produits et consommation des intrants */
-  U.cart.forEach(function(i){
+  U.cart.forEach(function(i,ix){
     var p=prodById(i.id);if(!p)return;
     var s=st(p,pdv);if(s!==null)p.stock[pdv]=Math.max(0,s-i.qty);
-    (p.recipe||[]).forEach(function(r){var g=ingById(r.ing);if(!g)return;var q=ist(g,pdv);if(!q)return;var u=i.qty*r.g;q.cur=r6(q.cur-u);q.used=r6(q.used+u)});
+    sale.items[ix].use.forEach(function(r){var g=ingById(r.ing);if(!g)return;var q=ist(g,pdv);if(!q)return;var u=r6(i.qty*r.q);q.cur=r6(q.cur-u);q.used=r6(q.used+u)});
   });
   if(SYNC_ON)Sync.settle(stockKeys(U.cart,pdv));
   S.sales.unshift(sale);logEv('sale','Vente N° '+pad(no)+' : '+fmt(sale.total)+' FC');save();resetSale();
   U.tab='sale';render();showTicket(sale,true);
 }
-function stockKeys(items,pdv){var k=[];items.forEach(function(i){k.push('stock/p:'+i.id+':'+pdv);var pr=prodById(i.id);((pr&&pr.recipe)||(i.use||[]).map(function(u){return {ing:u.ing}})).forEach(function(r){k.push('istock/i:'+r.ing+':'+pdv)})});return k}
+function packUse(pr,qty,pdv){
+  var t=((pr&&pr.pack)||[]).filter(function(x){return x.up>0}).sort(function(a,b){return a.up-b.up});
+  if(pdv&&t.length>1){var av=t.filter(function(x){var g=ingById(x.ing),q=g&&ist(g,pdv);return !q||q.cur>0});if(av.length&&av.length<t.length)t=av}
+  if(!t.length||!(qty>0))return [];
+  var L=t[t.length-1],full=Math.floor(qty/L.up),rem=qty-full*L.up,bags={};
+  if(full)bags[L.ing]=full;
+  if(rem>0){var x=t.find(function(y){return rem<=y.up});bags[x.ing]=(bags[x.ing]||0)+1}
+  return Object.keys(bags).map(function(k){return {ing:k,q:r6(bags[k]/qty)}});
+}
+function lineUse(pr,qty,pdv){return ((pr&&pr.recipe)||[]).map(function(r){return {ing:r.ing,q:r.g}}).concat(packUse(pr,qty,pdv))}
+function stockKeys(items,pdv){var k=[];items.forEach(function(i){k.push('stock/p:'+i.id+':'+pdv);var pr=prodById(i.id);((pr&&pr.recipe||[]).concat((pr&&pr.pack)||[])).concat(pr?[]:(i.use||[]).map(function(u){return {ing:u.ing}})).forEach(function(r){k.push('istock/i:'+r.ing+':'+pdv)})});return k}
 function resetSale(){U.cart=[];U.client=undefined;U.cq='';U.usePoints=false;U.unlocked=false;U.pts='';U.cash='';U.keep=false}
 
 function breakdown(id){
@@ -943,6 +953,18 @@ function recipeHTML(){
   }).join('');
   return top+rows+'<button class="btn sm" style="margin-top:12px" data-a="radd">+ Ajouter un intrant</button>';
 }
+function packLabels(){
+  var u=M.pack.map(function(r,i){return {i:i,up:parseInt(r.up,10)||0}}).filter(function(x){return x.up>0}).sort(function(a,b){return a.up-b.up}),prev=0,m={};
+  u.forEach(function(x){m[x.i]=x.up>prev?(prev+1===x.up?'S’applique à '+x.up+' unité seulement':'S’applique de '+(prev+1)+' à '+x.up+' unités'):'';prev=Math.max(prev,x.up)});
+  M.pack.forEach(function(r,i){var el=$('#pl'+i);if(el)el.textContent=m[i]||''});
+}
+function packHTML(){
+  var opts=function(sel){return S.ingredients.map(function(g){return '<option value="'+g.id+'"'+(g.id===sel?' selected':'')+'>'+esc(g.name)+'</option>'}).join('')};
+  if(!S.ingredients.length)return '<div class="hint">Créez d’abord l’emballage comme intrant (Stock → Nouvel intrant).</div>';
+  return M.pack.map(function(r,i){return '<div class="rrow" style="margin-top:6px"><select class="sel" data-c="psel" data-idx="'+i+'" aria-label="Emballage">'+opts(r.ing)+'</select>'
+    +'<input class="inp" inputmode="numeric" data-i="pu" data-idx="'+i+'" value="'+esc(r.up||'')+'" placeholder="jusqu’à (unités)" aria-label="Jusqu’à combien d’unités">'
+    +'<button class="btn sm" data-a="pdel" data-idx="'+i+'" aria-label="Retirer">✕</button></div><div class="hint" id="pl'+i+'"></div>'}).join('')+'<button class="btn sm" style="margin-top:10px" data-a="padd">+ Ajouter un palier d’emballage</button>';
+}
 function prodFormHTML(p){
   var isNew=!p;p=p||{name:'',price:'',cost:'',b:0,p1:0,p2:0};
   var f=function(id,l,v,ph){return '<label class="lbl" for="'+id+'">'+l+'</label><input id="'+id+'" class="inp" inputmode="decimal" data-i="dn" value="'+esc(String(v).replace('.',','))+'"'+(ph?' placeholder="'+ph+'"':'')+'>'};
@@ -955,6 +977,7 @@ function prodFormHTML(p){
       +S.pdvs.map(function(pd){return f('st_'+pd.id,'PDV '+esc(pd.name),'','vide = non suivi')}).join('');
   }else h+='<div class="note" style="margin-top:14px">Pour ajouter du stock, utilisez l’onglet Stock.</div>';
   h+='<div class="sub-h" style="margin-top:18px">Intrants par unité vendue (g, ml ou nombre, selon l’intrant)</div><div class="hint">Pour chaque intrant, vous choisissez s’il se mesure en grammes, en millilitres ou en nombre (par exemple des sachets de lait). Pour chaque ligne, saisissez la quantité par unité vendue (décimales acceptées, ex. 3,21) ou la quantité consommée pour un lot entier : l’application divise alors par la taille du lot. La consommation réelle est comparée à la consommation prévue, avec une marge d’erreur de '+S.margin+' %.</div><div id="recipeBox"></div>'
+   +'<div class="sub-h" style="margin-top:18px">Emballage selon la quantité achetée (facultatif)</div><div class="hint">Indiquez la limite haute de chaque emballage : petit = 1, grand = 4. L’application affiche la plage obtenue (grand : de 2 à 4). Un emballage ne sert que dans sa plage ; s’il est épuisé, l’application utilise automatiquement l’autre (petits pour chaque pain si les grands manquent, grands si les petits manquent) : le grand n’est jamais utilisé pour 1 pain si le petit existe. Le plus grand emballage sert pour chaque tranche complète (ex. 4 pains), puis le reste prend le palier qui convient (5 pains = 1 grand + 1 petit, 6 pains = 2 grands). Les sacs sont des intrants (en nombre).</div><div id="packBox"></div>'
    +'<div class="row" style="margin-top:18px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="saveProd" data-id="'+(p.id||'')+'">Enregistrer</button></div>'
    +(p.id?'<button class="btn danger wide" style="margin-top:10px" data-a="delProd" data-id="'+p.id+'">Supprimer le produit</button>':'');
   return h;
@@ -991,6 +1014,7 @@ function stockMultiHTML(kind,id){
   var unitTxt=kind==='p'?'unités':unitName(unit(o));
   return '<h3>Stock de plusieurs points de vente</h3><div class="muted" style="margin:-6px 0 8px">'+esc(o.name)+' · '+unitTxt+'</div>'
    +'<label class="lbl" for="smm">Ce que vous saisissez</label><select id="smm" class="sel"><option value="add">S’ajoute au stock actuel</option><option value="set">Remplace le stock actuel (niveau exact)</option></select>'
+   +'<label class="lbl" for="sma" style="margin-top:10px">Même quantité pour tous les points de vente</label><div class="row" style="gap:8px"><input id="sma" class="inp grow" inputmode="decimal" placeholder="0"><button class="btn" data-a="smFill">Appliquer à tous</button></div><div class="hint" style="margin-top:6px">Les cases se remplissent : vous pouvez ensuite changer la quantité d’un point de vente précis.</div>'
    +(S.pdvs.length>6?'<input id="smq" type="search" class="inp" style="margin-top:10px" data-i="smq" autocomplete="off" placeholder="Rechercher un point de vente">':'')
    +'<div class="card" style="margin-top:10px;max-height:50vh;overflow:auto">'+S.pdvs.map(function(pd){
       var cur=kind==='p'?st(o,pd.id):(ist(o,pd.id)?ist(o,pd.id).cur:null);
@@ -1316,7 +1340,7 @@ function startSession(u,silent){
 }
 function logoutNow(){if(U.user)logEv('logout','Déconnexion');U.user=null;S.session=null;resetSale();save();render();if(SYNC_ON)Sync.logout()}
 var STOCK_ACT={delIngDo:1,saveMulti:1,addStock:1,saveStock:1,saveProd:1,delProd:1,saveIng:1,saveCount:1,countIng:1};
-var OWNER_ONLY={delIngAsk:1,delIngDo:1,stockMulti:1,saveMulti:1,stockItem:1,stockGo:1,slowToggle:1,lockAsk:1,lockDo:1,unlockSeller:1,shiftDetail:1,editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
+var OWNER_ONLY={smFill:1,delIngAsk:1,delIngDo:1,stockMulti:1,saveMulti:1,stockItem:1,stockGo:1,slowToggle:1,lockAsk:1,lockDo:1,unlockSeller:1,shiftDetail:1,editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
 
 /* rendu général */
 function tabView(){
@@ -1397,6 +1421,10 @@ var A={
     S.users=S.users.filter(function(x){return x.id!==u.id});logEv('seller_del','Compte vendeur supprimé : '+u.name);save();render();toast('Compte supprimé.')},
   sfilter:function(d){U.sf=d.v;$('#sellerList').innerHTML=sellerListHTML();var c=$('#sellerChips');if(c)c.querySelectorAll('[data-a=sfilter]').forEach(function(b){b.classList.toggle('primary',b.dataset.v===U.sf)})},
   stockMulti:function(d){openModal(stockMultiHTML(d.kind,d.id))},
+  smFill:function(){var v=(($('#sma')||{}).value||'').trim();if(!v){toast('Saisissez d’abord la quantité commune.');return}
+    if(isNaN(parseDec(v))||parseDec(v)<0){toast('Quantité invalide.','bad');return}
+    var n=0;document.querySelectorAll('.smi').forEach(function(el){var row=el.closest('.smrow');if(row&&row.style.display==='none')return;el.value=v;n++});
+    toast('Quantité appliquée à '+n+' point'+(n>1?'s':'')+' de vente.')},
   saveMulti:function(d){
     var o=d.kind==='p'?prodById(d.id):ingById(d.id);if(!o)return;
     var set=($('#smm')||{}).value==='set',n=0,bad=false;
@@ -1516,9 +1544,11 @@ var A={
   rejectReset:function(d){var r=S.resets.find(function(x){return x.id===d.id});if(r&&resetActive(r)){r.status='rejected';save();render();toast('Demande refusée.')}},
   doReset:function(d){var r=S.resets.find(function(x){return x.id===d.id});if(!r||r.status!=='approved'||!resetActive(r)){toast('Autorisation expirée ou absente.');closeModal();render();return}closeModal();resetPinFlow(r.custId,r.id)},
   /* produits */
-  newProd:function(){openModal(prodFormHTML());M.recipe=[];M.batch='';$('#recipeBox').innerHTML=recipeHTML()},
+  newProd:function(){openModal(prodFormHTML());M.recipe=[];M.pack=[];M.batch='';$('#recipeBox').innerHTML=recipeHTML();$('#packBox').innerHTML=packHTML()},
+  padd:function(){M.pack.push({ing:S.ingredients[0].id,up:''});$('#packBox').innerHTML=packHTML();packLabels()},
+  pdel:function(d){M.pack.splice(+d.idx,1);$('#packBox').innerHTML=packHTML();packLabels()},
   editProd:function(d){var p=prodById(d.id);openModal(prodFormHTML(p));M.batch=p.batch?String(p.batch):'';
-    M.recipe=(p.recipe||[]).map(function(r){var lotRow=r.mode==='l'&&r.raw!=null;return {ing:r.ing,mode:lotRow?'l':'u',g:String(lotRow?r.raw:r.g).replace('.',',')}});$('#recipeBox').innerHTML=recipeHTML()},
+    M.recipe=(p.recipe||[]).map(function(r){var lotRow=r.mode==='l'&&r.raw!=null;return {ing:r.ing,mode:lotRow?'l':'u',g:String(lotRow?r.raw:r.g).replace('.',',')}});$('#recipeBox').innerHTML=recipeHTML();M.pack=(p.pack||[]).map(function(x){return {ing:x.ing,up:String(x.up)}});$('#packBox').innerHTML=packHTML();packLabels()},
   radd:function(){M.recipe.push({ing:S.ingredients.length?S.ingredients[0].id:'__new',mode:'u',g:'',nn:'',nu:'g',nl:''});$('#recipeBox').innerHTML=recipeHTML()},
   rdel:function(d){M.recipe.splice(+d.idx,1);$('#recipeBox').innerHTML=recipeHTML()},
   saveProd:function(d){
@@ -1538,13 +1568,16 @@ var A={
     });
     var N=parseInt(M.batch,10),usesLot=M.recipe.some(function(r){return r.mode==='l'&&parseDec(r.g)>0});
     if(usesLot&&!(N>0)){toast('Saisissez la taille du lot.');return}
+    var pack=M.pack.map(function(x){return {ing:x.ing,up:parseInt(x.up,10)}}).filter(function(x){return x.up>0});
+    if(M.pack.length&&pack.length!==M.pack.length){toast('Indiquez « jusqu’à » combien d’unités pour chaque emballage.');return}
+    if(new Set(pack.map(function(x){return x.up})).size!==pack.length){toast('Deux emballages ont la même limite.');return}
     var recipe=[];
     M.recipe.forEach(function(r){var v=parseDec(r.g);if(!(v>0))return;
       if(r.mode==='l')recipe.push({ing:r.ing,mode:'l',raw:v,g:r6(v/N)});else recipe.push({ing:r.ing,mode:'u',raw:v,g:r6(v)})});
-    if(d.id){var p=prodById(d.id);var oldP=p.price;Object.assign(p,{name:name,price:price,cost:cost,b:b,p1:p1,p2:p2,recipe:recipe});if(usesLot)p.batch=N;else delete p.batch}
+    if(d.id){var p=prodById(d.id);var oldP=p.price;Object.assign(p,{name:name,price:price,cost:cost,b:b,p1:p1,p2:p2,recipe:recipe});if(pack.length)p.pack=pack;else delete p.pack;if(usesLot)p.batch=N;else delete p.batch}
     else{
       var stock={};S.pdvs.forEach(function(pd){var v=num('st_'+pd.id);if(!isNaN(v))stock[pd.id]=Math.round(v)});
-      var np={id:'r'+nid(),name:name,price:price,cost:cost,b:b,p1:p1,p2:p2,stock:stock,recipe:recipe};if(usesLot)np.batch=N;S.products.push(np);
+      var np={id:'r'+nid(),name:name,price:price,cost:cost,b:b,p1:p1,p2:p2,stock:stock,recipe:recipe};if(pack.length)np.pack=pack;if(usesLot)np.batch=N;S.products.push(np);
     }
     logEv('product',(d.id?'Produit modifié : ':'Produit créé : ')+name+' · prix '+fmt(price)+' FC'+(d.id&&oldP!==price?' (avant : '+fmt(oldP)+' FC)':''));
     save();closeModal();toast('Produit enregistré.');render();
@@ -1572,7 +1605,7 @@ var A={
     S.ingredients.push(g);save();closeModal();toast('Intrant créé.');render();
   },
   delIngAsk:function(d){var g=ingById(d.id);if(!g)return;
-    var used=S.products.filter(function(p){return (p.recipe||[]).some(function(r){return r.ing===g.id})});
+    var used=S.products.filter(function(p){return (p.recipe||[]).concat(p.pack||[]).some(function(r){return r.ing===g.id})});
     if(used.length){openModal('<h3>Suppression impossible</h3><p class="muted">« '+esc(g.name)+' » est utilisé dans la recette de '+used.length+' produit'+(used.length>1?'s':'')+' :</p><div class="card">'+used.map(function(p){return '<div class="item"><div class="grow">'+esc(p.name)+'</div></div>'}).join('')+'</div><p class="hint" style="margin-top:8px">Retirez d’abord cet intrant de ces recettes (Produits, Modifier), puis recommencez.</p><button class="btn primary wide" style="margin-top:12px" data-a="closeModal">Compris</button>');return}
     openModal('<h3>Supprimer l’intrant</h3><p class="muted">Supprimer « '+esc(g.name)+' » et son stock dans tous les points de vente ? Cette action est définitive.</p><div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn danger grow" data-a="delIngDo" data-id="'+g.id+'">Supprimer</button></div>')},
   delIngDo:function(d){var g=ingById(d.id);if(!g)return;
@@ -1659,6 +1692,7 @@ var I={
     $('#spRes').innerHTML=r.length?r.map(function(c){return '<button class="rowbtn" data-a="pickSponsor" data-id="'+c.id+'"><div class="grow"><b>'+esc(c.name)+'</b><div class="small muted">'+esc(c.phone)+'</div></div></button>'}).join(''):(n?'<div class="hint">Aucun client trouvé : il sera enregistré sans parrain.</div>':'')},
   cash:function(t){var v=decIn(t.value);if(v!==t.value)t.value=v;U.cash=v;refreshCalc()},
   pts:function(t){var v=decIn(t.value);if(v!==t.value)t.value=v;U.pts=v;refreshCalc()},
+  pu:function(t){var v=digits(t.value);if(v!==t.value)t.value=v;M.pack[+t.dataset.idx].up=v;packLabels()},
   rnn:function(t){M.recipe[+t.dataset.idx].nn=t.value},
   rnl:function(t){var i=+t.dataset.idx,r=M.recipe[i];r.nl=t.value;var rg=$('#rg'+i),rm=$('#rm'+i);if(rg)rg.placeholder=rowUnit(r);if(rm)rm.textContent=rowHint(r)},
   rg:function(t){var i=+t.dataset.idx,v=t.value.replace(/[^0-9.,]/g,'');if(v!==t.value)t.value=v;M.recipe[i].g=v;var el=$('#rm'+i);if(el)el.textContent=rowHint(M.recipe[i])},
@@ -1675,6 +1709,7 @@ document.addEventListener('change',function(e){
   if(k==='rpdv'){U.rpdv=e.target.value;render()}
   if(k==='rday'){U.rday=e.target.value;render()}
   if(k==='spdv'){if(e.target.value==='*'){U.sall=true}else{U.sall=false;U.spdv=e.target.value}render()}
+  if(k==='psel'&&M.pack){M.pack[+e.target.dataset.idx].ing=e.target.value;return}
   if((k==='rsel'||k==='rnu'||k==='rmo')&&M.recipe){var r0=M.recipe[+e.target.dataset.idx];
     if(k==='rsel')r0.ing=e.target.value;else if(k==='rnu')r0.nu=e.target.value;else r0.mode=e.target.value;
     $('#recipeBox').innerHTML=recipeHTML()}
@@ -2000,10 +2035,3 @@ render();
 Sync.start();
 })();
 </script>
-<script>
-if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
-  window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});
-}
-</script>
-</body>
-</html>
