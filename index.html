@@ -229,7 +229,7 @@ svg.map{background:var(--surface-2);border-radius:8px;border:1px solid var(--lin
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v38';
+var APP_VER='v39',APP_BUILD=39;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -443,6 +443,7 @@ function calc(){
 var liveChk=false;
 function finalizeSale(){
   var c=calc();if(c.err){toast(c.err,'bad');return}
+  if(c.pu>0&&outdated()){toast('Mettez l’application à jour (fermez-la puis rouvrez-la) pour payer en points.','bad');return}
   if(c.pu>0&&!U.online){toast('Hors ligne : points indisponibles.','bad');return}
   if(c.pu>0&&SYNC_ON){
     if(liveChk)return;liveChk=true;toast('Réservation des points…');
@@ -867,8 +868,16 @@ var RESET_TTL=30*60000;
 function resetActive(r){if(!(r.status==='pending'||(r.status==='approved'&&Date.now()-r.approvedAt<RESET_TTL)))return false;return !S.resets.some(function(x){return x.id!==r.id&&x.custId===r.custId&&x.status==='done'&&(x.doneAt||x.approvedAt||0)>=r.ts})}
 function resetOf(cid){return S.resets.filter(function(r){return r.custId===cid&&resetActive(r)})[0]}
 function lockReqBanner(){return S.users.filter(function(u){return u.locked&&u.unlockReq}).map(function(u){return '<div class="note pts" style="margin-top:12px"><b>Demande de reconnexion</b> : '+esc(u.name)+' ('+tstr(Date.parse(u.unlockReq))+')<button class="btn sm primary" style="margin-top:8px" data-a="unlockSeller" data-id="'+u.id+'">Autoriser la reconnexion</button></div>'}).join('')}
+function outdated(){return (S.minVer||0)>APP_BUILD}
+function outdatedBanner(){
+  return outdated()?'<div class="note bad" style="margin:10px 0"><b>Nouvelle version disponible.</b> Fermez complètement l’application puis rouvrez-la (une ou deux fois). En attendant, le paiement en points est désactivé sur ce terminal.</div>':'';
+}
+function alertBanner(){
+  var n=S.log.filter(function(e){return e.type==='alert'&&Date.now()-e.ts<7*864e5}).length;
+  return n?'<div class="note bad" style="margin-top:12px"><b>'+n+' dépense(s) de points refusée(s) par le serveur</b> ces 7 derniers jours (solde insuffisant). Voir Gestion → Journal.</div>':'';
+}
 function resetBanner(){
-  if(U.user&&U.user.role==='owner')return lockReqBanner()+scBanner()+stockBanner();
+  if(U.user&&U.user.role==='owner')return lockReqBanner()+alertBanner()+scBanner()+stockBanner();
   if(!U.user)return '';
   return S.resets.filter(function(r){return r.status==='approved'&&resetActive(r)&&r.pdvId===U.user.pdvId}).map(function(r){var c=custById(r.custId);
     return '<div class="note pts" style="margin-top:12px"><b>Réinitialisation autorisée</b> pour '+esc(c?c.name:'?')+' (valable '+Math.max(1,Math.ceil((RESET_TTL-(Date.now()-r.approvedAt))/60000))+' min).<button class="btn sm primary" style="margin-top:8px" data-a="doReset" data-id="'+r.id+'">Le client choisit son nouveau code</button></div>'}).join('');
@@ -1423,11 +1432,11 @@ function closeStaleResets(){var ch=false;S.resets.forEach(function(r){if((r.stat
 function render(){
   var app=$('#app'),dock=$('#dock');
   if(!U.user){app.innerHTML=viewLogin();dock.hidden=true;return}
-  if(U.user.role==='owner')closeStaleResets();
+  if(U.user.role==='owner'){closeStaleResets();if((S.minVer||0)<APP_BUILD){S.minVer=APP_BUILD;save()}}
   if(U.tab==='manage'&&U.user.role!=='owner')U.tab='sale';
   if(U.tab==='cash'&&U.user.role==='owner')U.tab='sale';
   if(U.user.role!=='owner'&&!openShift(U.user.id)){app.innerHTML='<div class="shell">'+topbar()+'<main class="main">'+openCashView()+'</main></div>';dock.hidden=true;return}
-  app.innerHTML='<div class="shell">'+topbar()+'<main class="main">'+tabView()+'</main></div>';
+  app.innerHTML='<div class="shell">'+topbar()+'<main class="main">'+outdatedBanner()+tabView()+'</main></div>';
   dock.hidden=false;$('#nav').innerHTML=navHTML();
   $('#actionBar').innerHTML=U.tab==='sale'?actionHTML():'';
   sizeDock();
@@ -1878,7 +1887,7 @@ var Sync=(function(){
     Object.keys(S.floats||{}).forEach(function(k){add('floats',k,k,S.floats[k])});
     S.counts.forEach(function(x){add('counts',x.id,x.pdvId,x)});
     ['log','positions','moves','merges'].forEach(function(c){(S[c]||[]).forEach(function(x){add(c,'x'+cyrb53(stab(x)),x.pdvId||x.pdv,x)})});
-    add('config','main',null,{margin:S.margin,geoEnabled:S.geoEnabled,brand:S.brand||null,counters:S.counters||[]});
+    add('config','main',null,{margin:S.margin,geoEnabled:S.geoEnabled,brand:S.brand||null,counters:S.counters||[],minVer:S.minVer||0});
     return R;
   }
   function find(arr,id){for(var i=0;i<arr.length;i++)if(arr[i].id===id)return i;return -1}
@@ -1890,7 +1899,7 @@ var Sync=(function(){
     if(c==='stock'||c==='istock'){var pt=id.split(':'),ob=(c==='stock'?prodById:ingById)(pt[1]);if(!ob)return;
       ob.stock=ob.stock||{};if(del)delete ob.stock[pt[2]];else{ob.stock[pt[2]]=c==='stock'?d.cur:d;if(c==='stock'&&d.ref>0){ob.ref=ob.ref||{};ob.ref[pt[2]]=d.ref}}return}
     if(c==='floats'){if(del)delete S.floats[id];else S.floats[id]=d;return}
-    if(c==='config'){if(d.margin!=null)S.margin=d.margin;if(d.geoEnabled!=null)S.geoEnabled=d.geoEnabled;if(d.brand)S.brand=d.brand;if(d.counters)S.counters=d.counters;return}
+    if(c==='config'){if(d.margin!=null)S.margin=d.margin;if(d.geoEnabled!=null)S.geoEnabled=d.geoEnabled;if(d.brand)S.brand=d.brand;if(d.counters)S.counters=d.counters;if(d.minVer)S.minVer=d.minVer;return}
     if(ARR[c]){arr=S[ARR[c]];i=find(arr,id);if(del){if(i>=0)arr.splice(i,1)}else if(i>=0)arr[i]=d;else arr.push(d);return}
     if(ARR0[c]&&!del)S[ARR0[c]].push(d);
   }
