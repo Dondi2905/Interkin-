@@ -229,7 +229,7 @@ svg.map{background:var(--surface-2);border-radius:8px;border:1px solid var(--lin
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v37';
+var APP_VER='v38';
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -572,6 +572,22 @@ function ticketLines(s){
   L.push('');
   return L;
 }
+
+function ticketCanvas(s,cb){
+  var L=ticketLines(s),br=brand(),CW=480,PAD=24,fam='ui-monospace,Menlo,Consolas,"Courier New",monospace';
+  var m=document.createElement('canvas').getContext('2d');m.font='20px '+fam;
+  var fs=20*(CW-2*PAD)/(W*Math.max(1,m.measureText('M').width)),lh=Math.round(fs*1.3);
+  function draw(img){
+    var ih=0,iw=0;
+    if(img){iw=Math.round((CW-2*PAD)*Math.min(1,(br.lw||384)/384));ih=Math.round(img.height*iw/img.width)+14}
+    var c=document.createElement('canvas');c.width=CW;c.height=PAD*2+ih+L.length*lh;var x=c.getContext('2d');
+    x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.fillStyle='#000';x.textBaseline='top';x.font=fs+'px '+fam;
+    if(img)x.drawImage(img,Math.round((CW-iw)/2),PAD,iw,ih-14);
+    L.forEach(function(t,i){x.fillText(t,PAD,PAD+ih+i*lh)});
+    cb(c)}
+  if(br.logo){var im=new Image();im.onload=function(){draw(im)};im.onerror=function(){draw(null)};im.src=br.logo}else draw(null);
+}
+function waNumber(ph){var d=digits(ph||'');if(!d)return '';if(d.charAt(0)==='0')d='243'+d.slice(1);return d}
 
 /* ---------- logo (noir et blanc, largeur max 384 points = 58 mm) ---------- */
 function processLogo(file,cb){
@@ -1152,6 +1168,7 @@ function showTicket(s,fresh){
   openModal('<h3>'+(fresh?'Vente enregistrée ✓':'Ticket N° '+pad(s.no))+'</h3>'+(s.cancelled?'<div class="note bad"><b>Vente annulée</b> le '+dstr(s.cancelled.ts)+' à '+tstr(s.cancelled.ts)+' par '+esc(s.cancelled.byName)+'. Motif : '+esc(s.cancelled.reason)+'</div>':'')+'<div class="paper">'+(brand().logo?'<img src="'+brand().logo+'" alt="Logo" style="display:block;margin:0 auto 8px;width:'+Math.min(100,Math.round((brand().lw||384)/384*100))+'%;height:auto;image-rendering:pixelated">':'')+'<pre>'+esc(ticketLines(s).join('\n'))+'</pre></div>'
    +'<p class="hint" style="margin:10px 0 0;text-align:center">Aperçu au format 58 mm (32 colonnes).</p>'
    +'<div class="row" style="margin-top:14px"><button class="btn grow" data-a="copyTicket" data-id="'+s.id+'">Copier</button><button class="btn grow" data-a="printTicket">Imprimer</button></div>'
+   +(s.cancelled?'':'<button class="btn wide" style="margin-top:10px" data-a="shareTicket" data-id="'+s.id+'">Envoyer sur WhatsApp (image)</button>'+(function(){var c=s.custId?S.customers.find(function(z){return z.id===s.custId}):null;return c&&c.phone?'<p class="hint" style="margin:6px 0 0;text-align:center">Dans WhatsApp, choisissez le contact : '+esc(c.name)+' · '+esc(c.phone)+'</p>':''})())
    +(U.user&&U.user.role==='owner'&&!fresh&&!s.cancelled?'<button class="btn danger wide" style="margin-top:10px" data-a="cancelAsk" data-id="'+s.id+'">Annuler cette vente</button>':'')
    +'<button class="btn primary wide" style="margin-top:10px" data-a="closeModal">'+(fresh?'Nouvelle vente':'Fermer')+'</button>');
 }
@@ -1739,6 +1756,18 @@ var A={
     var s=S.sales.find(function(x){return x.id===d.id});if(!s)return;var txt=ticketLines(s).join('\n');
     var fallback=function(){var ta=document.createElement('textarea');ta.value=txt;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();var ok=false;try{ok=document.execCommand('copy')}catch(e){}document.body.removeChild(ta);toast(ok?'Ticket copié.':'Copie impossible ici.')};
     try{navigator.clipboard.writeText(txt).then(function(){toast('Ticket copié.')},fallback)}catch(e){fallback()}
+  },
+  shareTicket:function(d){
+    var s=S.sales.find(function(x){return x.id===d.id});if(!s)return;
+    var c=s.custId?S.customers.find(function(z){return z.id===s.custId}):null;
+    ticketCanvas(s,function(cv){cv.toBlob(function(b){
+      if(!b){toast('Image impossible ici.');return}
+      var f;try{f=new File([b],'ticket-'+pad(s.no)+'.png',{type:'image/png'})}catch(e){f=null}
+      if(f&&navigator.canShare&&navigator.canShare({files:[f]})){
+        navigator.share({files:[f],title:'Ticket N° '+pad(s.no)}).catch(function(e){if(e&&e.name!=='AbortError')toast('Partage impossible : '+(e.message||e))});return}
+      var n=waNumber(c&&c.phone),url='https://wa.me/'+(n?n:'')+'?text='+encodeURIComponent('```'+ticketLines(s).join('\n')+'```');
+      toast('Image non prise en charge ici : le ticket est envoyé en texte.');
+      window.open(url,'_blank')},'image/png')});
   },
   printTicket:function(){try{var pa=$('#printArea'),pp=$('#modal .paper');if(!pp)return;pa.innerHTML='';pa.appendChild(pp.cloneNode(true));window.print();setTimeout(function(){pa.innerHTML=''},1500)}catch(e){toast('Impression indisponible ici : ouvrez l’application depuis son adresse web, dans Chrome.')}},
   /* gestion */
