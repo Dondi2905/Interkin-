@@ -259,7 +259,7 @@ var PERLAB={today:'Aujourd’hui',week:'Cette semaine',month:'Ce mois',all:'Tout
 function seed(){
   var ig=function(a,b){return {p1:{cur:a,open:a,added:0,used:0},p2:{cur:b,open:b,added:0,used:0}}};
   var lot=function(ing,raw,N){return {ing:ing,raw:raw,mode:'l',g:Math.round(raw/N*1e6)/1e6}};
-  var S={v:2,seq:200,saleSeq:0,geoEnabled:true,margin:7,moves:[],counts:[],
+  var S={v:2,seq:200,saleSeq:0,geoEnabled:true,margin:7,moves:[],counts:[],counters:[],
     pdvs:[{id:'p1',name:'Gombe',lat:-4.3090,lng:15.3130},{id:'p2',name:'Limete',lat:-4.3380,lng:15.3480}],
     ingredients:[
       {id:'i1',name:'Farine de blé',stock:ig(25000,18000)},
@@ -318,14 +318,14 @@ function seed(){
 }
 function load(){try{var r=localStorage.getItem(KEY);if(r){var o=JSON.parse(r);if(o&&o.v===2)return o}}catch(e){}return null}
 var DEVID=(function(){try{var d=localStorage.getItem('interkin-dev');if(!d){d=Math.random().toString(36).slice(2,5);localStorage.setItem('interkin-dev',d)}return d}catch(e){return 'x'+Math.random().toString(36).slice(2,4)}})();
-function blank(){return {v:2,seq:200,saleSeq:0,geoEnabled:true,margin:7,moves:[],counts:[],pdvs:[],ingredients:[],products:[],customers:[],ledger:[],sales:[],positions:[],resets:[],merges:[],users:[],shifts:[],withdrawals:[],log:[],floats:{}}}
+function blank(){return {v:2,seq:200,saleSeq:0,geoEnabled:true,margin:7,moves:[],counts:[],counters:[],pdvs:[],ingredients:[],products:[],customers:[],ledger:[],sales:[],positions:[],resets:[],merges:[],users:[],shifts:[],withdrawals:[],log:[],floats:{}}}
 var S=load()||(SYNC_ON?blank():seed());
 function nid(){return (SYNC_ON?DEVID:'')+(++S.seq)}
 function nextNo(pdv){var m=0;S.sales.forEach(function(x){if(x.pdvId===pdv&&x.no>m)m=x.no});return m+1}
 /* ---------- comptes, caisse, journal ---------- */
 var hashPw=function(pw,id){return cyrb53(pw+':'+id+':interkin-pw')};
 function ensureAccounts(S){
-  S.shifts=S.shifts||[];S.withdrawals=S.withdrawals||[];S.log=S.log||[];S.floats=S.floats||{};
+  S.shifts=S.shifts||[];S.counters=S.counters||[];S.withdrawals=S.withdrawals||[];S.log=S.log||[];S.floats=S.floats||{};
   if(!S.users){
     S.users=[{id:'u0',name:'Propriétaire',phone:'0800000000',pw:hashPw('interkin2026','u0'),role:'owner',pdvId:null}];
     var n=0;S.pdvs.forEach(function(p,i){['matin','soir'].forEach(function(sh,j){n++;
@@ -851,7 +851,7 @@ function resetActive(r){if(!(r.status==='pending'||(r.status==='approved'&&Date.
 function resetOf(cid){return S.resets.filter(function(r){return r.custId===cid&&resetActive(r)})[0]}
 function lockReqBanner(){return S.users.filter(function(u){return u.locked&&u.unlockReq}).map(function(u){return '<div class="note pts" style="margin-top:12px"><b>Demande de reconnexion</b> : '+esc(u.name)+' ('+tstr(Date.parse(u.unlockReq))+')<button class="btn sm primary" style="margin-top:8px" data-a="unlockSeller" data-id="'+u.id+'">Autoriser la reconnexion</button></div>'}).join('')}
 function resetBanner(){
-  if(U.user&&U.user.role==='owner')return lockReqBanner()+stockBanner();
+  if(U.user&&U.user.role==='owner')return lockReqBanner()+scBanner()+stockBanner();
   if(!U.user)return '';
   return S.resets.filter(function(r){return r.status==='approved'&&resetActive(r)&&r.pdvId===U.user.pdvId}).map(function(r){var c=custById(r.custId);
     return '<div class="note pts" style="margin-top:12px"><b>Réinitialisation autorisée</b> pour '+esc(c?c.name:'?')+' (valable '+Math.max(1,Math.ceil((RESET_TTL-(Date.now()-r.approvedAt))/60000))+' min).<button class="btn sm primary" style="margin-top:8px" data-a="doReset" data-id="'+r.id+'">Le client choisit son nouveau code</button></div>'}).join('');
@@ -1003,7 +1003,7 @@ function stockView(){
      var lcChip=lc?'<span class="chip '+(lc.ok?'good':'bad')+'">Écart '+(lc.pct>0?'+':'')+dec(lc.pct)+' %'+(lc.ok?' · dans la marge':' · hors marge')+'</span>':'';
      return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(g.name)+'</div>'
        +(s?'<div class="num" style="font:600 18px var(--font-head)">'+qf(g,s.cur)+'</div><div class="small muted">Consommé depuis le dernier comptage : '+qf(g,s.used)+'</div><div style="margin-top:6px">'+lcChip+'</div>':'<div class="small muted">Non suivi dans ce point de vente</div>')+'</div>'
-       +(owner?'<div class="stack" style="gap:6px"><button class="btn sm" data-a="addStock" data-kind="i" data-id="'+g.id+'">+ Ajouter</button>'+(s?'<button class="btn sm" data-a="countIng" data-id="'+g.id+'">Compter</button>':'')+'<button class="btn sm danger" data-a="delIngAsk" data-id="'+g.id+'">Supprimer</button></div>':'')+'</div>'}).join('')+'</div>';
+       +(owner?'<div class="stack" style="gap:6px"><button class="btn sm" data-a="addStock" data-kind="i" data-id="'+g.id+'">+ Ajouter</button>'+(s?'<button class="btn sm" data-a="countIng" data-id="'+g.id+'">Compter</button>':'')+'<button class="btn sm" data-a="cntFlag" data-id="'+g.id+'">'+(g.cnt?'✓ À chaque clôture':'Compter à la clôture')+'</button>'+'<button class="btn sm danger" data-a="delIngAsk" data-id="'+g.id+'">Supprimer</button></div>':'')+'</div>'}).join('')+'</div>';
   var mv=S.moves.filter(function(m){return m.pdv===pdv}).slice(0,5);
   if(mv.length)h+='<h2 class="h">Derniers ajouts</h2><div class="card">'+mv.map(function(m){var o=m.kind==='p'?prodById(m.id):ingById(m.id);return '<div class="item"><div class="grow small">'+esc(o?o.name:'?')+'<div class="muted">'+dstr(m.ts)+' '+tstr(m.ts)+'</div></div><b class="good num">+'+qn(m.qty,2)+(m.kind==='i'?' '+unit(o):'')+'</b></div>'}).join('')+'</div>';
   return h;
@@ -1176,7 +1176,10 @@ function manageGen(){
    +(br.logo?'<div class="paper" style="margin-top:10px"><img src="'+br.logo+'" alt="Logo" style="display:block;margin:0 auto;width:'+Math.min(100,Math.round((br.lw||384)/384*100))+'%;height:auto;image-rendering:pixelated"></div><button class="btn wide" style="margin-top:8px" data-a="rmLogo">Retirer le logo</button>':'')
    +'<div class="hint" style="margin-top:8px">Le logo est réduit à 384 points de large (58 mm) et converti en noir et blanc pour l’imprimante thermique. Le logo s’imprime en haut du ticket et la devise en bas.</div></div>';
   h+='<h2 class="h">Intrants</h2><div class="card"><label class="lbl" for="mg">Marge d’erreur de consommation (%)</label><div class="row"><input id="mg" class="inp grow" inputmode="decimal" data-i="dn" value="'+String(S.margin).replace('.',',')+'"><button class="btn primary" data-a="saveMargin">Enregistrer</button></div>'
-   +'<div class="hint" style="margin-top:6px">Un comptage dont l’écart dépasse cette marge déclenche une alerte.</div></div>';
+   +'<div class="hint" style="margin-top:6px">Un comptage dont l’écart dépasse cette marge déclenche une alerte.</div>'
+   +'<div class="sub-h" style="margin-top:14px">Personnes de confiance pour le comptage</div>'+(S.counters.length?'<div style="margin-bottom:8px">'+S.counters.map(function(n,i){return '<span class="chip">'+esc(n)+' <button class="btn sm" style="padding:0 6px" data-a="ctDel" data-idx="'+i+'" aria-label="Retirer '+esc(n)+'">✕</button></span>'}).join(' ')+'</div>':'')
+   +'<div class="row"><input id="ctn" class="inp grow" maxlength="40" placeholder="Nom (ex. Marie)"><button class="btn primary" data-a="ctAdd">Ajouter</button></div>'
+   +'<div class="hint" style="margin-top:6px">À chaque clôture de caisse, une tâche « Stock à compter » vous attend. Les intrants marqués « Compter à la clôture » (onglet Stock) y figurent ; si aucun n’est marqué, tous y figurent.</div></div>';
   h+='<h2 class="h">Points de vente</h2><div class="card">'+S.pdvs.map(function(p){var sl=S.users.filter(function(u){return u.role==='seller'&&u.pdvId===p.id});return '<div class="item"><div class="grow"><b>'+esc(p.name)+'</b><div class="small muted">'+(sl.length?sl.map(function(u){return esc(u.name)}).join(' · '):'Aucun vendeur')+'</div></div><button class="btn sm danger" data-a="delPdv" data-id="'+p.id+'">Supprimer</button></div>'}).join('')
    +'<label class="lbl" for="npdv">Nouveau point de vente</label><div class="row"><input id="npdv" class="inp grow" placeholder="Nom du point de vente"><button class="btn primary" data-a="addPdv">Ajouter</button></div></div>';
   if(SYNC_ON)h+='<h2 class="h">Page client</h2><div class="card"><div class="hint" style="margin:0 0 8px">Vos clients consultent leur solde sur ce lien avec leur numéro et leur code secret.</div><input id="clink" class="inp" readonly value="'+esc(clientLink())+'"><button class="btn wide" style="margin-top:10px" data-a="copyLink">Copier le lien</button></div>';
@@ -1253,16 +1256,50 @@ function shiftDetailHTML(h){
   o+='<div class="sub-h">Mouvements d’espèces</div><div class="card"><div class="item"><div class="grow small muted">'+tstr(h.openTs)+' · Fond de caisse de départ</div><b class="num">'+fmt(h.float)+' FC</b></div>'
    +(mv.length?mv.map(function(m){run=r2(run+m.a);return '<div class="item" style="align-items:flex-start"><div class="grow small"><div>'+tstr(m.ts)+' · '+m.t+'</div>'+(m.sub?'<div class="muted">'+m.sub+'</div>':'')+'</div><div style="text-align:right"><b class="num '+(m.a<0?'bad':'good')+'">'+(m.a<0?'−':'+')+fmt(Math.abs(m.a))+'</b><div class="small muted num">solde '+fmt(run)+'</div></div></div>'}).join(''):'<div class="muted small" style="padding:8px 0">Aucun mouvement pour le moment.</div>')+'</div>';
   if(false&&wd.length)o+='<div class="sub-h">Retraits pendant ce service</div><div class="card">'+wd.map(function(w){return '<div class="item"><div class="grow small">'+tstr(w.ts)+(w.note?'<div class="muted">'+esc(w.note)+'</div>':'')+'</div><b class="num">−'+fmt(w.amount)+' FC</b></div>'}).join('')+'</div>';
+  if(h.sc)o+=h.sc.st==='p'?'<div class="sub-h">Comptage du stock</div><div class="note" style="background:#eef4ff;color:#1d4ed8">Stock pas encore compté pour ce service.<button class="btn sm primary" style="margin-top:8px" data-a="scOpen" data-id="'+h.id+'">Saisir le comptage</button></div>':scDoneHTML(h);
   o+='<div class="hint" style="margin-top:8px">Les retraits sont enregistrés par point de vente : ils comptent pour le vendeur en service à ce moment-là.</div><button class="btn wide" style="margin-top:12px" data-a="closeModal">Fermer</button>';
   return o;
 }
 function shiftRow(h,adm){
   var d=h.diff,chip=h.forced?'<span class="chip">Clôturé par le propriétaire</span>':(d===0?'<span class="chip good">Caisse juste</span>':'<span class="chip bad">'+(d>0?'Excédent +':'Manque ')+fmt(Math.abs(d))+' FC</span>');
+  if(h.sc)chip+=' '+(h.sc.st==='p'?'<span class="chip">Stock à compter</span>':(h.sc.rows.some(function(r){return !r.ok})?'<span class="chip bad">Écart de stock</span>':'<span class="chip good">Stock juste</span>'));
   return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(h.name)+'</div><div class="small muted">'+dstr(h.openTs)+' · '+tstr(h.openTs)+' → '+tstr(h.closeTs)+'</div>'
    +'<div class="small num muted">Attendu '+fmt(h.expected)+' · Compté '+(h.counted==null?'—':fmt(h.counted))+(h.float!==h.suggested?' · fond déclaré '+fmt(h.float)+' (prévu '+fmt(h.suggested)+')':'')+'</div></div><div class="stack">'+chip+(adm?'<button class="btn sm" data-a="shiftDetail" data-id="'+h.id+'">Détail</button>':'')+'</div></div>';
 }
+function scList(h){
+  var all=S.ingredients.filter(function(g){return ist(g,h.pdvId)}),fl=all.filter(function(g){return g.cnt});
+  return fl.length?fl:all;
+}
+function scCalc(h,g,cnt){
+  var s=ensureIng(g,h.pdvId),T=h.closeTs||Date.now(),lu=0,la=0;
+  S.sales.forEach(function(x){if(x.pdvId!==h.pdvId||x.cancelled||x.ts<=T)return;(x.items||[]).forEach(function(it){(it.use||[]).forEach(function(u){if(u.ing===g.id)lu+=it.qty*u.q})})});
+  S.moves.forEach(function(m){if(m.kind==='i'&&m.id===g.id&&m.pdv===h.pdvId&&m.ts>T)la+=m.qty});
+  lu=r6(lu);la=r6(la);
+  var theo=r6(s.used-lu),added=r6(s.added-la),actual=r6(s.open+added-cnt),dev=actual-theo;
+  var pct=theo>0?dev/theo*100:(dev===0?0:100);
+  return {g:g,cnt:cnt,theo:theo,actual:actual,pct:pct,ok:Math.abs(pct)<=S.margin,lu:lu,la:la};
+}
+function scPending(){return S.shifts.filter(function(h){return h.state==='closed'&&h.sc&&h.sc.st==='p'&&Date.now()-h.closeTs<14*864e5}).sort(function(a,b){return a.closeTs-b.closeTs})}
+function scBanner(){
+  var l=scPending();if(!l.length)return '';
+  return '<div class="note" style="margin-top:12px;background:#eef4ff;color:#1d4ed8"><b>Stock à compter ('+l.length+')</b>'+l.slice(0,4).map(function(h){var pd=pdvById(h.pdvId);
+    return '<div class="row sp" style="margin-top:6px"><div class="small">'+esc(h.name)+' · '+esc(pd?pd.name:'')+' · clôturé '+dstr(h.closeTs)+' '+tstr(h.closeTs)+'</div><button class="btn sm" data-a="scOpen" data-id="'+h.id+'">Saisir</button></div>'}).join('')+(l.length>4?'<div class="small" style="margin-top:6px">…et '+(l.length-4)+' autre(s) (Gestion → Caisse).</div>':'')+'</div>';
+}
+function scHTML(h,v){
+  v=v||{};var pd=pdvById(h.pdvId),late=Date.now()-h.closeTs>3*36e5,me=U.user.name||'Propriétaire';
+  var by=v.by||'__me',opts='<option value="__me"'+(by==='__me'?' selected':'')+'>Moi, '+esc(me)+'</option>'+S.counters.map(function(n){return '<option value="'+esc(n)+'"'+(by===n?' selected':'')+'>'+esc(n)+'</option>'}).join('')+'<option value="__other"'+(by==='__other'?' selected':'')+'>Autre personne…</option>';
+  return '<h3>Comptage du stock</h3><div class="muted small">'+esc(h.name)+' · PDV '+esc(pd?pd.name:'')+'<br>Service clôturé le '+dstr(h.closeTs)+' à '+tstr(h.closeTs)+'</div>'
+   +(late?'<div class="note bad" style="margin-top:10px">Ce comptage date de plus de 3 heures. Les ventes faites depuis la clôture sont retirées automatiquement, mais vérifiez les réapprovisionnements faits depuis.</div>':'')
+   +'<label class="lbl" for="scby">Compté par</label><select id="scby" class="sel" data-c="scby">'+opts+'</select><input id="scbo" class="inp" style="margin-top:6px;'+(by==='__other'?'':'display:none')+'" placeholder="Nom de la personne" maxlength="40" value="'+esc(v.other||'')+'">'
+   +'<div class="hint" style="margin-top:10px">Saisissez les quantités comptées à la clôture. Laissez vide ce qui n’a pas été compté.</div><div class="card" style="margin-top:8px;max-height:46vh;overflow:auto">'
+   +scList(h).map(function(g){return '<div class="item"><div class="grow"><div style="font-weight:600">'+esc(g.name)+'</div><div class="small muted">en '+unitName(unit(g))+'</div></div><input class="inp sci" style="width:110px" inputmode="decimal" placeholder="0" data-ing="'+g.id+'" value="'+esc((v.vals&&v.vals[g.id])||'')+'" aria-label="Quantité comptée de '+esc(g.name)+'"></div>'}).join('')+'</div>'
+   +'<div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Plus tard</button><button class="btn primary grow" data-a="scReview" data-id="'+h.id+'">Vérifier</button></div>';
+}
+function scDoneHTML(h){
+  var c=h.sc;return '<div class="sub-h">Comptage du stock</div><div class="small muted" style="margin-bottom:6px">Compté par '+esc(c.by)+' · saisi le '+dstr(c.ts)+' à '+tstr(c.ts)+'</div><div class="card">'+c.rows.map(function(r){return '<div class="item"><div class="grow"><div style="font-weight:600">'+esc(r.name)+'</div><div class="small muted num">Compté '+qn(r.cnt,2)+' · prévu '+qn(r.theo,2)+' consommé</div></div><span class="chip '+(r.ok?'good':'bad')+'">'+(r.pct>0?'+':'')+dec(r.pct)+' %</span></div>'}).join('')+'</div>';
+}
 function finishShift(h,counted,forced){
-  h.closeTs=Date.now();h.expected=expectedCash(h);h.counted=forced?null:counted;h.diff=forced?null:r2(counted-h.expected);h.forced=!!forced;h.state='closed';
+  h.closeTs=Date.now();h.expected=expectedCash(h);h.counted=forced?null:counted;h.diff=forced?null:r2(counted-h.expected);h.forced=!!forced;h.state='closed';if(scList(h).length)h.sc={st:'p'};
   logEv('shift_close','Clôture de caisse de '+h.name+' : attendu '+fmt(h.expected)+' FC'+(forced?' (clôture forcée)':', compté '+fmt(counted)+' FC, écart '+fmt(h.diff)+' FC'));
 }
 function liveCashInner(){
@@ -1339,8 +1376,8 @@ function startSession(u,silent){
   save();render();window.scrollTo(0,0);
 }
 function logoutNow(){if(U.user)logEv('logout','Déconnexion');U.user=null;S.session=null;resetSale();save();render();if(SYNC_ON)Sync.logout()}
-var STOCK_ACT={delIngDo:1,saveMulti:1,addStock:1,saveStock:1,saveProd:1,delProd:1,saveIng:1,saveCount:1,countIng:1};
-var OWNER_ONLY={smFill:1,delIngAsk:1,delIngDo:1,stockMulti:1,saveMulti:1,stockItem:1,stockGo:1,slowToggle:1,lockAsk:1,lockDo:1,unlockSeller:1,shiftDetail:1,editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
+var STOCK_ACT={scConfirm:1,delIngDo:1,saveMulti:1,addStock:1,saveStock:1,saveProd:1,delProd:1,saveIng:1,saveCount:1,countIng:1};
+var OWNER_ONLY={scOpen:1,scReview:1,scBack:1,scConfirm:1,cntFlag:1,ctAdd:1,ctDel:1,smFill:1,delIngAsk:1,delIngDo:1,stockMulti:1,saveMulti:1,stockItem:1,stockGo:1,slowToggle:1,lockAsk:1,lockDo:1,unlockSeller:1,shiftDetail:1,editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
 
 /* rendu général */
 function tabView(){
@@ -1438,6 +1475,32 @@ var A={
     if(bad){toast('Vérifiez les quantités saisies (nombres positifs).','bad');return}
     if(!n){toast('Saisissez au moins une quantité.');return}
     S.moves=S.moves.slice(0,30);save();closeModal();render();toast('Stock enregistré pour '+n+' point'+(n>1?'s':'')+' de vente.')},
+  scOpen:function(d){var h=S.shifts.find(function(x){return x.id===d.id});if(!h||!h.sc||h.sc.st!=='p')return;M.sc={id:h.id};openModal(scHTML(h))},
+  scReview:function(d){
+    var h=S.shifts.find(function(x){return x.id===d.id});if(!h||!h.sc||h.sc.st!=='p')return;
+    var sel=$('#scby').value,other=($('#scbo')||{}).value||'',vals={},rows=[],bad=false;
+    document.querySelectorAll('.sci').forEach(function(el){var raw=el.value.trim();vals[el.dataset.ing]=raw;if(!raw)return;var q=parseDec(raw);if(isNaN(q)||q<0){bad=true;return}rows.push(scCalc(h,ingById(el.dataset.ing),q))});
+    if(sel==='__other'&&!other.trim()){toast('Indiquez le nom de la personne qui a compté.');return}
+    if(bad){toast('Vérifiez les quantités saisies (nombres positifs).','bad');return}
+    if(!rows.length){toast('Saisissez au moins une quantité.');return}
+    var by=sel==='__me'?(U.user.name||'Propriétaire')+' (propriétaire)':sel==='__other'?other.trim():sel;
+    M.sc={id:h.id,by:by,vals:vals,sel:sel,other:other,rows:rows};
+    $('.sheet').innerHTML='<h3>Vérifiez avant de valider</h3><div class="muted small">Compté par '+esc(by)+'</div><div class="card" style="margin-top:10px;max-height:50vh;overflow:auto">'+rows.map(function(r){return '<div class="item"><div class="grow"><div style="font-weight:600">'+esc(r.g.name)+'</div><div class="small muted num">Compté '+qf(r.g,r.cnt)+' · consommé prévu '+qf(r.g,r.theo)+'</div></div><span class="chip '+(r.ok?'good':'bad')+'">'+(r.pct>0?'+':'')+dec(r.pct)+' %</span></div>'}).join('')+'</div>'
+     +'<div class="row" style="margin-top:14px"><button class="btn grow" data-a="scBack" data-id="'+h.id+'">Corriger</button><button class="btn primary grow" data-a="scConfirm" data-id="'+h.id+'">Valider</button></div>'},
+  scBack:function(d){var h=S.shifts.find(function(x){return x.id===d.id});if(!h||!M.sc)return;$('.sheet').innerHTML=scHTML(h,{vals:M.sc.vals,by:M.sc.sel,other:M.sc.other})},
+  scConfirm:function(d){
+    var h=S.shifts.find(function(x){return x.id===d.id});if(!h||!h.sc||h.sc.st!=='p'||!M.sc||M.sc.id!==h.id)return;
+    var rows=M.sc.rows.map(function(r){return scCalc(h,r.g,r.cnt)});
+    rows.forEach(function(r){var st=ensureIng(r.g,h.pdvId);
+      S.counts.unshift({id:'k'+nid(),ts:Date.now(),ingId:r.g.id,pdvId:h.pdvId,theo:r.theo,actual:r.actual,pct:r.pct,ok:r.ok,by:M.sc.by,shiftId:h.id,seller:h.name,cts:h.closeTs});
+      st.open=r.cnt;st.added=r.la;st.used=r.lu;st.cur=r6(r.cnt+r.la-r.lu);
+      logEv('count','Comptage de '+r.g.name+' ('+h.name+', par '+M.sc.by+') : écart '+dec(r.pct)+' %'+(r.ok?'':' — HORS MARGE'))});
+    S.counts=S.counts.slice(0,200);
+    h.sc={st:'d',by:M.sc.by,ts:Date.now(),rows:rows.map(function(r){return {ing:r.g.id,name:r.g.name,cnt:r.cnt,theo:r.theo,pct:r.pct,ok:r.ok}})};
+    var bad=rows.filter(function(r){return !r.ok}).length;M.sc=null;save();closeModal();render();toast(bad?bad+' intrant(s) hors marge pour '+h.name+'.':'Comptage enregistré, tout est dans la marge.',bad?'bad':undefined)},
+  cntFlag:function(d){var g=ingById(d.id);if(!g)return;if(g.cnt)delete g.cnt;else g.cnt=true;save();render()},
+  ctAdd:function(){var n=(($('#ctn')||{}).value||'').trim();if(!n){toast('Saisissez un nom.');return}if(S.counters.indexOf(n)>=0){toast('Ce nom existe déjà.');return}S.counters.push(n);save();render()},
+  ctDel:function(d){S.counters.splice(+d.idx,1);save();render()},
   stockItem:function(d){openModal(stockItemHTML(d.kind,d.id))},
   stockGo:function(d){closeModal();U.tab='stock';U.sall=false;U.spdv=d.p;render()},
   slowToggle:function(){U.slow=!U.slow;render()},
@@ -1709,6 +1772,7 @@ document.addEventListener('change',function(e){
   if(k==='rpdv'){U.rpdv=e.target.value;render()}
   if(k==='rday'){U.rday=e.target.value;render()}
   if(k==='spdv'){if(e.target.value==='*'){U.sall=true}else{U.sall=false;U.spdv=e.target.value}render()}
+  if(k==='scby'){var o2=$('#scbo');if(o2)o2.style.display=e.target.value==='__other'?'':'none';return}
   if(k==='psel'&&M.pack){M.pack[+e.target.dataset.idx].ing=e.target.value;return}
   if((k==='rsel'||k==='rnu'||k==='rmo')&&M.recipe){var r0=M.recipe[+e.target.dataset.idx];
     if(k==='rsel')r0.ing=e.target.value;else if(k==='rnu')r0.nu=e.target.value;else r0.mode=e.target.value;
@@ -1761,7 +1825,7 @@ var Sync=(function(){
     Object.keys(S.floats||{}).forEach(function(k){add('floats',k,k,S.floats[k])});
     S.counts.forEach(function(x){add('counts',x.id,x.pdvId,x)});
     ['log','positions','moves','merges'].forEach(function(c){(S[c]||[]).forEach(function(x){add(c,'x'+cyrb53(stab(x)),x.pdvId||x.pdv,x)})});
-    add('config','main',null,{margin:S.margin,geoEnabled:S.geoEnabled,brand:S.brand||null});
+    add('config','main',null,{margin:S.margin,geoEnabled:S.geoEnabled,brand:S.brand||null,counters:S.counters||[]});
     return R;
   }
   function find(arr,id){for(var i=0;i<arr.length;i++)if(arr[i].id===id)return i;return -1}
@@ -1773,7 +1837,7 @@ var Sync=(function(){
     if(c==='stock'||c==='istock'){var pt=id.split(':'),ob=(c==='stock'?prodById:ingById)(pt[1]);if(!ob)return;
       ob.stock=ob.stock||{};if(del)delete ob.stock[pt[2]];else{ob.stock[pt[2]]=c==='stock'?d.cur:d;if(c==='stock'&&d.ref>0){ob.ref=ob.ref||{};ob.ref[pt[2]]=d.ref}}return}
     if(c==='floats'){if(del)delete S.floats[id];else S.floats[id]=d;return}
-    if(c==='config'){if(d.margin!=null)S.margin=d.margin;if(d.geoEnabled!=null)S.geoEnabled=d.geoEnabled;if(d.brand)S.brand=d.brand;return}
+    if(c==='config'){if(d.margin!=null)S.margin=d.margin;if(d.geoEnabled!=null)S.geoEnabled=d.geoEnabled;if(d.brand)S.brand=d.brand;if(d.counters)S.counters=d.counters;return}
     if(ARR[c]){arr=S[ARR[c]];i=find(arr,id);if(del){if(i>=0)arr.splice(i,1)}else if(i>=0)arr[i]=d;else arr.push(d);return}
     if(ARR0[c]&&!del)S[ARR0[c]].push(d);
   }
