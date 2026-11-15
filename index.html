@@ -356,6 +356,41 @@ var ingById=function(id){return S.ingredients.find(function(g){return g.id===id}
 var sponsorOf=function(c){return c&&c.sponsorId?custById(c.sponsorId)||null:null};
 var st=function(p,pdv){return p.stock&&p.stock[pdv]!=null?p.stock[pdv]:null};
 var ist=function(g,pdv){return g.stock&&g.stock[pdv]||null};
+var STOCK_RED=15,STOCK_ORANGE=30;
+function stockLvl(kind,o,pdv){
+  var s=kind==='p'?st(o,pdv):(ist(o,pdv)?ist(o,pdv).cur:null);if(s===null)return null;
+  var ref=kind==='p'?((o.ref&&o.ref[pdv])||0):(ist(o,pdv).open||0)+(ist(o,pdv).added||0),pct=ref>0?s/ref*100:null,state='ok';
+  if(s<=0||(kind==='p'&&s<=LOW)||(pct!==null&&pct<=STOCK_RED))state='red';else if(pct!==null&&pct<=STOCK_ORANGE)state='orange';
+  return {q:s,pct:pct,state:state}}
+function qtxt(kind,o,q){return kind==='p'?qn(q,0)+' unité(s)':qf(o,q)}
+function stockAlerts(){var out=[],n=0;
+  S.pdvs.forEach(function(pd){
+    S.products.forEach(function(p){var l=stockLvl('p',p,pd.id);if(!l)return;n++;if(l.state!=='ok')out.push({kind:'p',o:p,pd:pd,l:l})});
+    S.ingredients.forEach(function(g){var l=stockLvl('i',g,pd.id);if(!l)return;n++;if(l.state!=='ok')out.push({kind:'i',o:g,pd:pd,l:l})})});
+  out.sort(function(a,b){return (a.l.state==='red'?0:1)-(b.l.state==='red'?0:1)});
+  return {list:out,tracked:n}}
+function stockBanner(){
+  if(!U.user||U.user.role!=='owner')return '';var a=stockAlerts();if(!a.tracked)return '';
+  if(!a.list.length)return '<div class="note good" style="margin-top:12px"><b>Stocks suffisants</b> dans tous les points de vente.</div>';
+  var red=a.list.filter(function(x){return x.l.state==='red'}).length;
+  var rows=a.list.slice(0,6).map(function(x){return '<div class="small" style="margin-top:4px"><b>'+(x.l.state==='red'?'●':'◐')+'</b> '+esc(x.o.name)+', '+esc(x.pd.name)+' : '+qtxt(x.kind,x.o,x.l.q)+(x.l.pct!==null?' ('+Math.round(x.l.pct)+' %)':'')+'</div>'}).join('');
+  return '<div class="note '+(red?'bad':'')+'" style="margin-top:12px'+(red?'':';background:#fff4e5;color:#b54708')+'"><b>Stock bas</b> ('+a.list.length+')'+rows+(a.list.length>6?'<div class="small" style="margin-top:4px">et '+(a.list.length-6)+' autre(s)</div>':'')
+   +'<button class="btn sm" style="margin-top:8px" data-a="stockGo" data-p="'+a.list[0].pd.id+'">Voir le stock</button></div>'}
+function stockOverviewHTML(){
+  var only=!!U.slow;
+  var h='<h2 style="font-size:22px;margin-top:18px">Stock</h2><label class="lbl" for="spdv">Point de vente</label><select id="spdv" class="sel" data-c="spdv"><option value="*" selected>Tous les points de vente</option>'+S.pdvs.map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+'</option>'}).join('')+'</select>'+stockBanner()
+   +'<div class="row" style="margin-top:10px"><button class="btn sm'+(only?' primary':'')+'" data-a="slowToggle">Stock bas seulement</button></div>';
+  function block(kind,list){return list.map(function(o){
+    var cells=S.pdvs.map(function(pd){return {pd:pd,l:stockLvl(kind,o,pd.id)}}),tot=0,any=false;
+    cells.forEach(function(c){if(c.l){tot+=c.l.q;any=true}});
+    if(only&&!cells.some(function(c){return c.l&&c.l.state!=='ok'}))return '';
+    return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600;overflow-wrap:anywhere">'+esc(o.name)+'</div><div class="small muted">Total : '+(any?qtxt(kind,o,tot):'non suivi')+'</div></div>'
+     +'<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;max-width:62%">'+cells.map(function(c){var s=c.l?c.l.state:'';return '<span class="chip '+(s==='red'?'bad':s==='ok'?'good':'')+'"'+(s==='orange'?' style="background:#fff4e5;color:#b54708"':'')+'>'+esc(c.pd.name)+' : '+(c.l?qtxt(kind,o,c.l.q):'—')+'</span>'}).join('')+'</div></div>'}).join('')}
+  var a=block('p',S.products),b=block('i',S.ingredients),none='<div class="muted">Rien à afficher.</div>';
+  return h+'<h2 class="h">Produits</h2><div class="card">'+(a||none)+'</div><h2 class="h">Intrants</h2><div class="card">'+(b||none)+'</div>'
+   +'<div class="hint" style="margin-top:10px">Alerte rouge sous '+STOCK_RED+' % de la quantité reçue, orange sous '+STOCK_ORANGE+' %. Pour ajouter du stock ou compter, choisissez un point de vente précis.</div>';
+}
+
 var unit=function(g){return g&&g.unit?g.unit:'g'};
 var qn=function(n,dp){var k=Math.pow(10,dp),x=Math.round(n*k)/k,p=String(x).split('.');p[0]=p[0].replace(/\B(?=(\d{3})+(?!\d))/g,' ');return p.join(',')};
 var parseDec=function(s){var v=parseFloat(String(s==null?'':s).replace(',','.'));return isNaN(v)?NaN:v};
@@ -659,7 +694,8 @@ function topbar(){
 function navHTML(){
   var t=[['sale','Vente'],['clients','Clients'],['products','Produits'],['stock','Stock'],['reports','Rapports']];
   if(U.user.role==='owner')t.push(['manage','Gestion']);else t.push(['cash','Caisse']);
-  return t.map(function(x){return '<button data-a="tab" data-v="'+x[0]+'"'+(U.tab===x[0]?' aria-current="page"':'')+'><svg viewBox="0 0 24 24" aria-hidden="true">'+ICON[x[0]]+'</svg>'+x[1]+'</button>'}).join('');
+  var sa=U.user.role==='owner'?stockAlerts().list:[],sred=sa.some(function(x){return x.l.state==='red'});
+  return t.map(function(x){return '<button data-a="tab" data-v="'+x[0]+'"'+(U.tab===x[0]?' aria-current="page"':'')+'><svg viewBox="0 0 24 24" aria-hidden="true">'+ICON[x[0]]+'</svg>'+x[1]+(x[0]==='stock'&&sa.length?'<span aria-label="Stock bas" style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:4px;background:'+(sred?'#d92d20':'#f79009')+'"></span>':'')+'</button>'}).join('');
 }
 
 /* vente */
@@ -791,7 +827,7 @@ function resetActive(r){if(!(r.status==='pending'||(r.status==='approved'&&Date.
 function resetOf(cid){return S.resets.filter(function(r){return r.custId===cid&&resetActive(r)})[0]}
 function lockReqBanner(){return S.users.filter(function(u){return u.locked&&u.unlockReq}).map(function(u){return '<div class="note pts" style="margin-top:12px"><b>Demande de reconnexion</b> : '+esc(u.name)+' ('+tstr(Date.parse(u.unlockReq))+')<button class="btn sm primary" style="margin-top:8px" data-a="unlockSeller" data-id="'+u.id+'">Autoriser la reconnexion</button></div>'}).join('')}
 function resetBanner(){
-  if(U.user&&U.user.role==='owner')return lockReqBanner();
+  if(U.user&&U.user.role==='owner')return lockReqBanner()+stockBanner();
   if(!U.user)return '';
   return S.resets.filter(function(r){return r.status==='approved'&&resetActive(r)&&r.pdvId===U.user.pdvId}).map(function(r){var c=custById(r.custId);
     return '<div class="note pts" style="margin-top:12px"><b>Réinitialisation autorisée</b> pour '+esc(c?c.name:'?')+' (valable '+Math.max(1,Math.ceil((RESET_TTL-(Date.now()-r.approvedAt))/60000))+' min).<button class="btn sm primary" style="margin-top:8px" data-a="doReset" data-id="'+r.id+'">Le client choisit son nouveau code</button></div>'}).join('');
@@ -913,11 +949,12 @@ function prodFormHTML(p){
 /* stock */
 function stockPdv(){return U.user.role==='owner'?(U.spdv||U.user.pdvId):U.user.pdvId}
 function stockView(){
+  if(U.user.role==='owner'&&U.sall)return stockOverviewHTML();
   var owner=U.user.role==='owner',pdv=stockPdv(),pd=pdvById(pdv);
   var h='<h2 style="font-size:22px;margin-top:18px">Stock</h2>';
-  if(owner)h+='<label class="lbl" for="spdv">Point de vente</label><select id="spdv" class="sel" data-c="spdv">'+S.pdvs.map(function(p){return '<option value="'+p.id+'"'+(p.id===pdv?' selected':'')+'>'+esc(p.name)+'</option>'}).join('')+'</select>';
+  if(owner)h+='<label class="lbl" for="spdv">Point de vente</label><select id="spdv" class="sel" data-c="spdv"><option value="*">Tous les points de vente</option>'+S.pdvs.map(function(p){return '<option value="'+p.id+'"'+(p.id===pdv?' selected':'')+'>'+esc(p.name)+'</option>'}).join('')+'</select>';
   else h+='<p class="hint" style="margin:8px 0 0">Stock du PDV '+esc(pd?pd.name:'')+' (consultation).</p>';
-  h+='<h2 class="h">Produits (unités)</h2><div class="card">'+S.products.map(function(p){
+  h+=stockBanner()+'<h2 class="h">Produits (unités)</h2><div class="card">'+S.products.map(function(p){
     var s=st(p,pdv);
     return '<div class="item"><div class="grow"><div style="font-weight:600;overflow-wrap:anywhere">'+esc(p.name)+'</div>'+(owner?'<div class="small muted">Achat '+fmt(p.cost||0)+' FC</div>':'')+'</div>'
       +(s===null?'<span class="chip">Non suivi</span>':'<span class="chip '+(s<=LOW?'bad':'good')+'">'+s+' unité(s)'+(s<=LOW?' · stock bas':'')+'</span>')
@@ -1246,13 +1283,13 @@ function manageView(){
 }
 function startSession(u,silent){
   U.user={id:u.id,name:u.name,role:u.role==='owner'?'owner':u.shift,pdvId:u.role==='owner'?(U.lpdv||(S.pdvs[0]&&S.pdvs[0].id)||null):u.pdvId};
-  S.session={uid:u.id,pdvId:U.user.pdvId};U.tab='sale';U.spdv=null;resetSale();
+  S.session={uid:u.id,pdvId:U.user.pdvId};U.tab='sale';U.spdv=null;U.sall=false;resetSale();
   if(!silent){logEv('login','Connexion');ping()}
   save();render();window.scrollTo(0,0);
 }
 function logoutNow(){if(U.user)logEv('logout','Déconnexion');U.user=null;S.session=null;resetSale();save();render();if(SYNC_ON)Sync.logout()}
 var STOCK_ACT={addStock:1,saveStock:1,saveProd:1,delProd:1,saveIng:1,saveCount:1,countIng:1};
-var OWNER_ONLY={lockAsk:1,lockDo:1,unlockSeller:1,shiftDetail:1,editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
+var OWNER_ONLY={stockGo:1,slowToggle:1,lockAsk:1,lockDo:1,unlockSeller:1,shiftDetail:1,editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
 
 /* rendu général */
 function tabView(){
@@ -1332,6 +1369,8 @@ var A={
     if(SYNC_ON){Sync.rpc('delete_user',{p_id:u.id}).then(function(){logEv('seller_del','Compte vendeur supprimé : '+u.name);save();return Sync.profiles()}).then(function(){render();toast('Compte supprimé.')}).catch(function(er){toast(Sync.msg(er),'bad')});return}
     S.users=S.users.filter(function(x){return x.id!==u.id});logEv('seller_del','Compte vendeur supprimé : '+u.name);save();render();toast('Compte supprimé.')},
   sfilter:function(d){U.sf=d.v;$('#sellerList').innerHTML=sellerListHTML();var c=$('#sellerChips');if(c)c.querySelectorAll('[data-a=sfilter]').forEach(function(b){b.classList.toggle('primary',b.dataset.v===U.sf)})},
+  stockGo:function(d){U.tab='stock';U.sall=false;U.spdv=d.p;render()},
+  slowToggle:function(){U.slow=!U.slow;render()},
   askUnlock:function(){var ph=digits(($('#lph')||{}).value),pw=($('#lpw')||{}).value||'';if(!ph||!pw){toast('Saisissez votre numéro et votre mot de passe.');return}
     Sync.requestUnlock(ph,pw).then(function(){closeModal();toast('Demande envoyée au propriétaire. Réessayez après son autorisation.')}).catch(function(er){toast(Sync.msg(er),'bad')})},
   lockAsk:function(d){var u=userById(d.id);if(!u)return;openModal('<h3>Déconnecter et verrouiller</h3><p class="muted">'+esc(u.name)+' sera déconnecté tout de suite et ne pourra plus se reconnecter sans votre autorisation, même avec le bon mot de passe.</p><div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn danger grow" data-a="lockDo" data-id="'+u.id+'">Verrouiller</button></div>')},
@@ -1478,7 +1517,7 @@ var A={
     var q=numD('saq'),pdv=$('#sap').value;
     if(d.kind==='p')q=Math.round(q);
     if(!(q>0)){toast('Saisissez une quantité supérieure à 0.');return}
-    if(d.kind==='p'){var p=prodById(d.id);p.stock=p.stock||{};p.stock[pdv]=(p.stock[pdv]||0)+q}
+    if(d.kind==='p'){var p=prodById(d.id);p.stock=p.stock||{};p.stock[pdv]=(p.stock[pdv]||0)+q;p.ref=p.ref||{};p.ref[pdv]=p.stock[pdv]}
     else{var s=ensureIng(ingById(d.id),pdv);s.cur=r6(s.cur+q);s.added=r6(s.added+q)}
     var mo=d.kind==='p'?prodById(d.id):ingById(d.id);logEv('stock','Stock ajouté : '+(mo?mo.name:'?')+' +'+q);S.moves.unshift({ts:Date.now(),kind:d.kind,id:d.id,pdv:pdv,qty:q});S.moves=S.moves.slice(0,30);save();closeModal();toast('Stock ajouté.');render();
   },
@@ -1584,7 +1623,7 @@ document.addEventListener('change',function(e){
   if(k==='blogo'){var fl=e.target.files&&e.target.files[0];if(fl)processLogo(fl,function(u,w,h){if(!u){toast('Image illisible.');return}var b=brand();b.logo=u;b.lw=w;b.lh=h;b.noLogo=false;save();render();toast('Logo enregistré.')})}
   if(k==='rpdv'){U.rpdv=e.target.value;render()}
   if(k==='rday'){U.rday=e.target.value;render()}
-  if(k==='spdv'){U.spdv=e.target.value;render()}
+  if(k==='spdv'){if(e.target.value==='*'){U.sall=true}else{U.sall=false;U.spdv=e.target.value}render()}
   if((k==='rsel'||k==='rnu'||k==='rmo')&&M.recipe){var r0=M.recipe[+e.target.dataset.idx];
     if(k==='rsel')r0.ing=e.target.value;else if(k==='rnu')r0.nu=e.target.value;else r0.mode=e.target.value;
     $('#recipeBox').innerHTML=recipeHTML()}
@@ -1624,7 +1663,7 @@ var Sync=(function(){
     function add(coll,id,pdv,data){R[coll+'/'+id]={coll:coll,id:id,pdv:pdv||null,data:data,h:cyrb53(stab(data))}}
     S.pdvs.forEach(function(p){add('pdvs',p.id,null,p)});
     S.products.forEach(function(p){var d=Object.assign({},p);delete d.stock;add('products',p.id,null,d);
-      Object.keys(p.stock||{}).forEach(function(k){if(p.stock[k]!=null)add('stock','p:'+p.id+':'+k,k,{cur:p.stock[k]})})});
+      Object.keys(p.stock||{}).forEach(function(k){if(p.stock[k]!=null)add('stock','p:'+p.id+':'+k,k,(p.ref&&p.ref[k]>0)?{cur:p.stock[k],ref:p.ref[k]}:{cur:p.stock[k]})})});
     S.ingredients.forEach(function(g){var d=Object.assign({},g);delete d.stock;add('ingredients',g.id,null,d);
       Object.keys(g.stock||{}).forEach(function(k){if(g.stock[k])add('istock','i:'+g.id+':'+k,k,g.stock[k])})});
     S.customers.forEach(function(c){add('customers',c.id,null,c)});
@@ -1646,7 +1685,7 @@ var Sync=(function(){
       if(del){if(i>=0)arr.splice(i,1);return}
       var o=Object.assign({},d);o.stock=i>=0?arr[i].stock:{};if(i>=0)arr[i]=o;else arr.push(o);return}
     if(c==='stock'||c==='istock'){var pt=id.split(':'),ob=(c==='stock'?prodById:ingById)(pt[1]);if(!ob)return;
-      ob.stock=ob.stock||{};if(del)delete ob.stock[pt[2]];else ob.stock[pt[2]]=c==='stock'?d.cur:d;return}
+      ob.stock=ob.stock||{};if(del)delete ob.stock[pt[2]];else{ob.stock[pt[2]]=c==='stock'?d.cur:d;if(c==='stock'&&d.ref>0){ob.ref=ob.ref||{};ob.ref[pt[2]]=d.ref}}return}
     if(c==='floats'){if(del)delete S.floats[id];else S.floats[id]=d;return}
     if(c==='config'){if(d.margin!=null)S.margin=d.margin;if(d.geoEnabled!=null)S.geoEnabled=d.geoEnabled;if(d.brand)S.brand=d.brand;return}
     if(ARR[c]){arr=S[ARR[c]];i=find(arr,id);if(del){if(i>=0)arr.splice(i,1)}else if(i>=0)arr[i]=d;else arr.push(d);return}
