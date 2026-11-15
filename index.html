@@ -1748,7 +1748,7 @@ var Sync=(function(){
       var p=rows&&rows[0];
       if(!p||!p.active){forceOut('Votre compte a été désactivé.');throw HALT}
       if(p.locked){ST.lk=ST.lk||{};ST.lk[a.phone]=1;forceOut('Votre compte a été verrouillé par le propriétaire. Pour vous reconnecter, demandez-lui son autorisation.');throw HALT}
-      if(p.epoch!==a.epoch){forceOut('Session fermée : votre compte a été ouvert sur un autre appareil ou fermé par le propriétaire.');throw HALT}
+      if(p.epoch!==a.epoch){if(ST.creds)delete ST.creds[a.phone];forceOut('Session fermée : votre compte a été ouvert sur un autre appareil ou fermé par le propriétaire.');throw HALT}
       a.profile=p;S.users=[toUser(p)];rawSave();
     });
     return profiles();
