@@ -229,7 +229,7 @@ svg.map{background:var(--surface-2);border-radius:8px;border:1px solid var(--lin
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v40',APP_BUILD=39;
+var APP_VER='v41',APP_BUILD=39;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -937,6 +937,12 @@ function spSelHTML(){
 }
 
 /* produits */
+function packChips(p){
+  var t=((p&&p.pack)||[]).filter(function(x){return x.up>0}).sort(function(a,b){return a.up-b.up});
+  if(!t.length)return '';
+  var prev=0,ch=t.map(function(x){var g=ingById(x.ing),lo=prev+1;prev=x.up;return g?'<span class="chip">'+esc(g.name)+' · '+(lo===x.up?x.up+' unité':'de '+lo+' à '+x.up+' unités')+'</span>':''}).join(' ');
+  return '<div class="small muted" style="margin-top:8px">Emballage selon la quantité :</div><div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:6px">'+ch+'</div>';
+}
 function recipeChips(p){
   return (p.recipe||[]).map(function(r){var g=ingById(r.ing);return g?'<span class="chip">'+esc(g.name)+' '+qn(r.g,4)+' '+unit(g)+'</span>':''}).join(' ');
 }
@@ -948,7 +954,7 @@ function productsView(){
      var mg=p.price-(p.cost||0),pc=p.price?Math.round(mg/p.price*100):0;
      return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600;overflow-wrap:anywhere">'+esc(p.name)+'</div><div class="small muted num">Vente '+fmt(p.price)+' FC'+(owner?' · Achat '+fmt(p.cost||0)+' FC · Marge '+fmt(mg)+' FC ('+pc+' %)':'')+'</div>'
        +'<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px"><span class="chip pts">Acheteur '+p.b+'</span>'+(owner?'<span class="chip pts">Parrain 1 : '+p.p1+'</span><span class="chip pts">Parrain 2 : '+p.p2+'</span>':'')+'</div>'
-       +((p.recipe||[]).length&&owner?'<div class="small muted" style="margin-top:8px">Intrants par unité vendue'+(p.batch?' (calculés sur un lot de '+p.batch+')':'')+' :</div><div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:6px">'+recipeChips(p)+'</div>':'')+'</div>'
+       +((p.recipe||[]).length&&owner?'<div class="small muted" style="margin-top:8px">Intrants par unité vendue'+(p.batch?' (calculés sur un lot de '+p.batch+')':'')+' :</div><div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:6px">'+recipeChips(p)+'</div>':'')+(owner?packChips(p):'')+'</div>'
        +(owner?'<button class="btn sm" data-a="editProd" data-id="'+p.id+'">Modifier</button>':'')+'</div>'}).join('')+'</div>';
 }
 function newUnit(mode,label){return mode==='nombre'?((label||'').trim()||'unités'):mode==='ml'?'ml':'g'}
