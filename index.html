@@ -980,7 +980,7 @@ function stockView(){
      var lcChip=lc?'<span class="chip '+(lc.ok?'good':'bad')+'">Écart '+(lc.pct>0?'+':'')+dec(lc.pct)+' %'+(lc.ok?' · dans la marge':' · hors marge')+'</span>':'';
      return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(g.name)+'</div>'
        +(s?'<div class="num" style="font:600 18px var(--font-head)">'+qf(g,s.cur)+'</div><div class="small muted">Consommé depuis le dernier comptage : '+qf(g,s.used)+'</div><div style="margin-top:6px">'+lcChip+'</div>':'<div class="small muted">Non suivi dans ce point de vente</div>')+'</div>'
-       +(owner?'<div class="stack" style="gap:6px"><button class="btn sm" data-a="addStock" data-kind="i" data-id="'+g.id+'">+ Ajouter</button>'+(s?'<button class="btn sm" data-a="countIng" data-id="'+g.id+'">Compter</button>':'')+'</div>':'')+'</div>'}).join('')+'</div>';
+       +(owner?'<div class="stack" style="gap:6px"><button class="btn sm" data-a="addStock" data-kind="i" data-id="'+g.id+'">+ Ajouter</button>'+(s?'<button class="btn sm" data-a="countIng" data-id="'+g.id+'">Compter</button>':'')+'<button class="btn sm danger" data-a="delIngAsk" data-id="'+g.id+'">Supprimer</button></div>':'')+'</div>'}).join('')+'</div>';
   var mv=S.moves.filter(function(m){return m.pdv===pdv}).slice(0,5);
   if(mv.length)h+='<h2 class="h">Derniers ajouts</h2><div class="card">'+mv.map(function(m){var o=m.kind==='p'?prodById(m.id):ingById(m.id);return '<div class="item"><div class="grow small">'+esc(o?o.name:'?')+'<div class="muted">'+dstr(m.ts)+' '+tstr(m.ts)+'</div></div><b class="good num">+'+qn(m.qty,2)+(m.kind==='i'?' '+unit(o):'')+'</b></div>'}).join('')+'</div>';
   return h;
@@ -1315,8 +1315,8 @@ function startSession(u,silent){
   save();render();window.scrollTo(0,0);
 }
 function logoutNow(){if(U.user)logEv('logout','Déconnexion');U.user=null;S.session=null;resetSale();save();render();if(SYNC_ON)Sync.logout()}
-var STOCK_ACT={saveMulti:1,addStock:1,saveStock:1,saveProd:1,delProd:1,saveIng:1,saveCount:1,countIng:1};
-var OWNER_ONLY={stockMulti:1,saveMulti:1,stockItem:1,stockGo:1,slowToggle:1,lockAsk:1,lockDo:1,unlockSeller:1,shiftDetail:1,editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
+var STOCK_ACT={delIngDo:1,saveMulti:1,addStock:1,saveStock:1,saveProd:1,delProd:1,saveIng:1,saveCount:1,countIng:1};
+var OWNER_ONLY={delIngAsk:1,delIngDo:1,stockMulti:1,saveMulti:1,stockItem:1,stockGo:1,slowToggle:1,lockAsk:1,lockDo:1,unlockSeller:1,shiftDetail:1,editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
 
 /* rendu général */
 function tabView(){
@@ -1571,6 +1571,13 @@ var A={
     S.pdvs.forEach(function(pd){var v=numD('ig_'+pd.id);if(!isNaN(v))g.stock[pd.id]={cur:v,open:v,added:0,used:0}});
     S.ingredients.push(g);save();closeModal();toast('Intrant créé.');render();
   },
+  delIngAsk:function(d){var g=ingById(d.id);if(!g)return;
+    var used=S.products.filter(function(p){return (p.recipe||[]).some(function(r){return r.ing===g.id})});
+    if(used.length){openModal('<h3>Suppression impossible</h3><p class="muted">« '+esc(g.name)+' » est utilisé dans la recette de '+used.length+' produit'+(used.length>1?'s':'')+' :</p><div class="card">'+used.map(function(p){return '<div class="item"><div class="grow">'+esc(p.name)+'</div></div>'}).join('')+'</div><p class="hint" style="margin-top:8px">Retirez d’abord cet intrant de ces recettes (Produits, Modifier), puis recommencez.</p><button class="btn primary wide" style="margin-top:12px" data-a="closeModal">Compris</button>');return}
+    openModal('<h3>Supprimer l’intrant</h3><p class="muted">Supprimer « '+esc(g.name)+' » et son stock dans tous les points de vente ? Cette action est définitive.</p><div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn danger grow" data-a="delIngDo" data-id="'+g.id+'">Supprimer</button></div>')},
+  delIngDo:function(d){var g=ingById(d.id);if(!g)return;
+    if(S.products.some(function(p){return (p.recipe||[]).some(function(r){return r.ing===g.id})})){toast('Cet intrant est encore utilisé dans une recette.','bad');return}
+    logEv('ingredient','Intrant supprimé : '+g.name);S.ingredients=S.ingredients.filter(function(x){return x.id!==g.id});save();closeModal();render();toast('Intrant supprimé.')},
   countIng:function(d){openModal(countHTML(d.id))},
   saveCount:function(d){
     var g=ingById(d.id),pdv=$('#cpd').value,cnt=numD('cnt');
