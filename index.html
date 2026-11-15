@@ -259,7 +259,7 @@ var PERLAB={today:'Aujourd’hui',week:'Cette semaine',month:'Ce mois',all:'Tout
 function seed(){
   var ig=function(a,b){return {p1:{cur:a,open:a,added:0,used:0},p2:{cur:b,open:b,added:0,used:0}}};
   var lot=function(ing,raw,N){return {ing:ing,raw:raw,mode:'l',g:Math.round(raw/N*1e6)/1e6}};
-  var S={v:2,seq:200,saleSeq:0,geoEnabled:true,margin:7,moves:[],counts:[],counters:[],
+  var S={v:2,seq:200,saleSeq:0,geoEnabled:true,margin:7,moves:[],counts:[],
     pdvs:[{id:'p1',name:'Gombe',lat:-4.3090,lng:15.3130},{id:'p2',name:'Limete',lat:-4.3380,lng:15.3480}],
     ingredients:[
       {id:'i1',name:'Farine de blé',stock:ig(25000,18000)},
@@ -318,14 +318,14 @@ function seed(){
 }
 function load(){try{var r=localStorage.getItem(KEY);if(r){var o=JSON.parse(r);if(o&&o.v===2)return o}}catch(e){}return null}
 var DEVID=(function(){try{var d=localStorage.getItem('interkin-dev');if(!d){d=Math.random().toString(36).slice(2,5);localStorage.setItem('interkin-dev',d)}return d}catch(e){return 'x'+Math.random().toString(36).slice(2,4)}})();
-function blank(){return {v:2,seq:200,saleSeq:0,geoEnabled:true,margin:7,moves:[],counts:[],counters:[],pdvs:[],ingredients:[],products:[],customers:[],ledger:[],sales:[],positions:[],resets:[],merges:[],users:[],shifts:[],withdrawals:[],log:[],floats:{}}}
+function blank(){return {v:2,seq:200,saleSeq:0,geoEnabled:true,margin:7,moves:[],counts:[],pdvs:[],ingredients:[],products:[],customers:[],ledger:[],sales:[],positions:[],resets:[],merges:[],users:[],shifts:[],withdrawals:[],log:[],floats:{}}}
 var S=load()||(SYNC_ON?blank():seed());
 function nid(){return (SYNC_ON?DEVID:'')+(++S.seq)}
 function nextNo(pdv){var m=0;S.sales.forEach(function(x){if(x.pdvId===pdv&&x.no>m)m=x.no});return m+1}
 /* ---------- comptes, caisse, journal ---------- */
 var hashPw=function(pw,id){return cyrb53(pw+':'+id+':interkin-pw')};
 function ensureAccounts(S){
-  S.shifts=S.shifts||[];S.counters=S.counters||[];S.withdrawals=S.withdrawals||[];S.log=S.log||[];S.floats=S.floats||{};
+  S.shifts=S.shifts||[];S.withdrawals=S.withdrawals||[];S.log=S.log||[];S.floats=S.floats||{};
   if(!S.users){
     S.users=[{id:'u0',name:'Propriétaire',phone:'0800000000',pw:hashPw('interkin2026','u0'),role:'owner',pdvId:null}];
     var n=0;S.pdvs.forEach(function(p,i){['matin','soir'].forEach(function(sh,j){n++;
@@ -356,55 +356,6 @@ var ingById=function(id){return S.ingredients.find(function(g){return g.id===id}
 var sponsorOf=function(c){return c&&c.sponsorId?custById(c.sponsorId)||null:null};
 var st=function(p,pdv){return p.stock&&p.stock[pdv]!=null?p.stock[pdv]:null};
 var ist=function(g,pdv){return g.stock&&g.stock[pdv]||null};
-var STOCK_RED=15,STOCK_ORANGE=30;
-function stockLvl(kind,o,pdv){
-  var s=kind==='p'?st(o,pdv):(ist(o,pdv)?ist(o,pdv).cur:null);if(s===null)return null;
-  var ref=kind==='p'?((o.ref&&o.ref[pdv])||0):(ist(o,pdv).open||0)+(ist(o,pdv).added||0),pct=ref>0?s/ref*100:null,state='ok';
-  if(s<=0||(kind==='p'&&s<=LOW)||(pct!==null&&pct<=STOCK_RED))state='red';else if(pct!==null&&pct<=STOCK_ORANGE)state='orange';
-  return {q:s,pct:pct,state:state}}
-function qtxt(kind,o,q){return kind==='p'?qn(q,0)+' unité(s)':qf(o,q)}
-function stockAlerts(){var out=[],n=0;
-  S.pdvs.forEach(function(pd){
-    S.products.forEach(function(p){var l=stockLvl('p',p,pd.id);if(!l)return;n++;if(l.state!=='ok')out.push({kind:'p',o:p,pd:pd,l:l})});
-    S.ingredients.forEach(function(g){var l=stockLvl('i',g,pd.id);if(!l)return;n++;if(l.state!=='ok')out.push({kind:'i',o:g,pd:pd,l:l})})});
-  out.sort(function(a,b){return (a.l.state==='red'?0:1)-(b.l.state==='red'?0:1)});
-  return {list:out,tracked:n}}
-function stockBanner(){
-  if(!U.user||U.user.role!=='owner')return '';var a=stockAlerts();if(!a.tracked)return '';
-  if(!a.list.length)return '<div class="note good" style="margin-top:12px"><b>Stocks suffisants</b> dans tous les points de vente.</div>';
-  var red=a.list.filter(function(x){return x.l.state==='red'}).length;
-  var rows=a.list.slice(0,6).map(function(x){return '<div class="small" style="margin-top:4px"><b>'+(x.l.state==='red'?'●':'◐')+'</b> '+esc(x.o.name)+', '+esc(x.pd.name)+' : '+qtxt(x.kind,x.o,x.l.q)+(x.l.pct!==null?' ('+Math.round(x.l.pct)+' %)':'')+'</div>'}).join('');
-  return '<div class="note '+(red?'bad':'')+'" style="margin-top:12px'+(red?'':';background:#fff4e5;color:#b54708')+'"><b>Stock bas</b> ('+a.list.length+')'+rows+(a.list.length>6?'<div class="small" style="margin-top:4px">et '+(a.list.length-6)+' autre(s)</div>':'')
-   +'<button class="btn sm" style="margin-top:8px" data-a="stockGo" data-p="'+a.list[0].pd.id+'">Voir le stock</button></div>'}
-function stockOvRows(kind,list){
-  var n=norm(U.stq||''),only=!!U.slow;
-  var rows=list.filter(function(o){return !n||norm(o.name).indexOf(n)>=0}).map(function(o){
-    var r=0,w=0,k=0,na=0,tot=0;
-    S.pdvs.forEach(function(pd){var l=stockLvl(kind,o,pd.id);if(!l){na++;return}tot+=l.q;if(l.state==='red')r++;else if(l.state==='orange')w++;else k++});
-    return {o:o,r:r,w:w,k:k,na:na,tot:tot}}).filter(function(x){return !only||x.r||x.w});
-  rows.sort(function(a,b){return (b.r-a.r)||(b.w-a.w)||a.o.name.localeCompare(b.o.name,'fr')});
-  return rows.map(function(x){
-    var chips=(x.r?'<span class="chip bad">'+x.r+' en alerte rouge</span>':'')+(x.w?'<span class="chip" style="background:#fff4e5;color:#b54708">'+x.w+' en orange</span>':'')+(!x.r&&!x.w&&x.k?'<span class="chip good">'+x.k+' point(s) de vente OK</span>':'')+(x.na&&x.na<S.pdvs.length?'<span class="chip">'+x.na+' non suivi(s)</span>':'');
-    return '<button class="rowbtn" data-a="stockItem" data-kind="'+kind+'" data-id="'+x.o.id+'"><div class="grow"><div style="font-weight:600;overflow-wrap:anywhere">'+esc(x.o.name)+'</div><div class="small muted">Total : '+(x.na===S.pdvs.length?'non suivi':qtxt(kind,x.o,x.tot))+'</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">'+chips+'</div></div><span aria-hidden="true">›</span></button>'}).join('')}
-function stockOvList(){
-  var a=stockOvRows('p',S.products),b=stockOvRows('i',S.ingredients),none='<div class="muted">Rien à afficher.</div>';
-  return stockBanner()+'<h2 class="h">Produits</h2><div class="card">'+(a||none)+'</div><h2 class="h">Intrants</h2><div class="card">'+(b||none)+'</div>'}
-function stockItemHTML(kind,id){
-  var o=kind==='p'?prodById(id):ingById(id);if(!o)return '';
-  var order={red:0,orange:1,ok:2},cells=S.pdvs.map(function(pd){return {pd:pd,l:stockLvl(kind,o,pd.id)}});
-  cells.sort(function(a,b){return (a.l?order[a.l.state]:3)-(b.l?order[b.l.state]:3)||a.pd.name.localeCompare(b.pd.name,'fr')});
-  return '<h3>'+esc(o.name)+'</h3><div class="muted" style="margin:-6px 0 8px">Stock par point de vente</div><div class="card" style="max-height:60vh;overflow:auto">'+cells.map(function(c){var s=c.l?c.l.state:'';
-    return '<div class="item"><div class="grow"><div style="font-weight:600">'+esc(c.pd.name)+'</div>'+(c.l?'<div class="small muted">'+qtxt(kind,o,c.l.q)+(c.l.pct!==null?' · '+Math.round(c.l.pct)+' %':'')+'</div>':'<div class="small muted">Non suivi</div>')+'</div>'
-     +(c.l?'<span class="chip '+(s==='red'?'bad':s==='ok'?'good':'')+'"'+(s==='orange'?' style="background:#fff4e5;color:#b54708"':'')+'>'+(s==='red'?'Rouge':s==='orange'?'Orange':'OK')+'</span>':'')
-     +'<button class="btn sm" data-a="stockGo" data-p="'+c.pd.id+'">Ouvrir</button></div>'}).join('')+'</div><button class="btn wide" style="margin-top:12px" data-a="stockMulti" data-kind="'+kind+'" data-id="'+id+'">Saisir le stock de plusieurs points de vente</button><button class="btn wide" style="margin-top:8px" data-a="closeModal">Fermer</button>'}
-function stockOverviewHTML(){
-  var only=!!U.slow,a=stockAlerts(),red=a.list.filter(function(x){return x.l.state==='red'}).length;
-  return '<h2 style="font-size:22px;margin-top:18px">Stock</h2><label class="lbl" for="spdv">Point de vente</label><select id="spdv" class="sel" data-c="spdv"><option value="*" selected>Tous les points de vente</option>'+S.pdvs.map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+'</option>'}).join('')+'</select>'
-   +'<input id="stq" type="search" class="inp" style="margin-top:10px" data-i="stq" autocomplete="off" enterkeyhint="done" placeholder="Rechercher un produit ou un intrant" aria-label="Rechercher" value="'+esc(U.stq||'')+'">'
-   +'<div class="row" style="margin-top:8px"><button class="btn sm'+(only?' primary':'')+'" data-a="slowToggle">Stock bas seulement</button></div>'
-   +'<div id="stockOv">'+stockOvList()+'</div>'
-   +'<div class="hint" style="margin-top:10px">Touchez un article pour voir ses points de vente, les plus en difficulté en premier. Alerte rouge sous '+STOCK_RED+' % de la quantité reçue, orange sous '+STOCK_ORANGE+' %.</div>'}
-
 var unit=function(g){return g&&g.unit?g.unit:'g'};
 var qn=function(n,dp){var k=Math.pow(10,dp),x=Math.round(n*k)/k,p=String(x).split('.');p[0]=p[0].replace(/\B(?=(\d{3})+(?!\d))/g,' ');return p.join(',')};
 var parseDec=function(s){var v=parseFloat(String(s==null?'':s).replace(',','.'));return isNaN(v)?NaN:v};
@@ -439,40 +390,18 @@ function calc(){
   return {cust:cust,total:total,bal:bal,pu:pu,due:due,paid:paid,change:change,keep:keep,buyer:buyer,p1:p1,p2:p2,s1:s1,s2:s2,err:err,earned:buyer+keep};
 }
 
-var liveChk=false;
 function finalizeSale(){
   var c=calc();if(c.err){toast(c.err,'bad');return}
   if(c.pu>0&&!U.online){toast('Hors ligne : points indisponibles.','bad');return}
-  if(c.pu>0&&SYNC_ON){
-    if(liveChk)return;liveChk=true;toast('Réservation des points…');
-    var res={sid:'s'+nid(),lid:'l'+nid(),ts:Date.now(),pu:c.pu,note:'Points utilisés — ticket N° '+pad(nextNo(U.user.pdvId))};
-    var done=false,tm=setTimeout(function(){if(done)return;done=true;liveChk=false;
-      Sync.rpc('release_points',{p_lid:res.lid}).catch(function(){});
-      toast('Réseau lent : points non réservés. Réessayez ou payez sans points.','bad')},3500);
-    Sync.rpc('spend_points',{p_cust:c.cust.id,p_amount:c.pu,p_sale:res.sid,p_lid:res.lid,p_ts:res.ts,p_note:res.note}).then(function(r){
-      if(done){if(r&&r.ok)Sync.rpc('release_points',{p_lid:res.lid}).catch(function(){});return}
-      done=true;clearTimeout(tm);liveChk=false;
-      if(!r||!r.ok){var b=r&&r.balance!=null?Math.max(0,Number(r.balance)):0;U.pts=String(Math.floor(b*100)/100);render();toast(r&&r.error?r.error:'Solde réel : '+fmt(b)+' pts. Les points ont été ajustés, vérifiez avant de valider.','bad');return}
-      doFinalize(res)
-    }).catch(function(e){if(done)return;done=true;clearTimeout(tm);liveChk=false;
-      if(e&&e.status===404){doFinalize();return}
-      toast('Points non réservés : '+Sync.msg(e),'bad')});
-    return}
-  doFinalize()
-}
-function doFinalize(res){
-  var c=calc();if(c.err){if(res)Sync.rpc('release_points',{p_lid:res.lid}).catch(function(){});toast(c.err,'bad');return}
-  if(res&&Math.abs(c.pu-res.pu)>0.004){Sync.rpc('release_points',{p_lid:res.lid}).catch(function(){});toast('Le montant a changé, validez de nouveau.','bad');render();return}
-  if(c.pu>0&&!U.online){toast('Hors ligne : points indisponibles.','bad');return}
   var user=U.user,cust=c.cust,pdv=user.pdvId,no=nextNo(pdv),cogs=0;
   U.cart.forEach(function(i){cogs+=(i.cost||0)*i.qty});
-  var sale={id:res?res.sid:'s'+nid(),no:no,ts:Date.now(),pdvId:pdv,role:user.role,sellerId:user.id,sellerName:whoName(user),custId:cust?cust.id:null,custName:cust?cust.name:null,
-    items:U.cart.map(function(i){var pr=prodById(i.id);return {id:i.id,name:i.name,price:i.price,qty:i.qty,cost:i.cost||0,use:lineUse(pr,i.qty,pdv)}}),
+  var sale={id:'s'+nid(),no:no,ts:Date.now(),pdvId:pdv,role:user.role,sellerId:user.id,sellerName:whoName(user),custId:cust?cust.id:null,custName:cust?cust.name:null,
+    items:U.cart.map(function(i){var pr=prodById(i.id);return {id:i.id,name:i.name,price:i.price,qty:i.qty,cost:i.cost||0,use:((pr&&pr.recipe)||[]).map(function(r){return {ing:r.ing,q:r.g}})}}),
     total:c.total,pointsUsed:c.pu,cashDue:c.due,cashPaid:c.paid,change:c.change,kept:c.keep,
     cashNet:c.paid-(c.change-c.keep),earned:0,balanceAfter:null,cogs:cogs,profit:c.total-cogs,offline:!U.online,pending:!U.online};
   if(cust){
     var tk=' — ticket N° '+pad(no);
-    if(c.pu>0){addLedger(cust.id,'spend',-c.pu,'Points utilisés'+tk,sale.id);if(res){var LR=S.ledger[S.ledger.length-1];LR.id=res.lid;LR.ts=res.ts;LR.note=res.note}}
+    if(c.pu>0)addLedger(cust.id,'spend',-c.pu,'Points utilisés'+tk,sale.id);
     if(c.keep>0)addLedger(cust.id,'earn_change',c.keep,'Monnaie transformée en points'+tk,sale.id);
     if(c.pu===0){
       if(c.buyer>0)addLedger(cust.id,'earn_purchase',c.buyer,'Points gagnés à l’achat'+tk,sale.id);
@@ -489,26 +418,16 @@ function doFinalize(res){
     sale.balanceAfter=balance(cust.id);
   }
   /* stock des produits et consommation des intrants */
-  U.cart.forEach(function(i,ix){
+  U.cart.forEach(function(i){
     var p=prodById(i.id);if(!p)return;
     var s=st(p,pdv);if(s!==null)p.stock[pdv]=Math.max(0,s-i.qty);
-    sale.items[ix].use.forEach(function(r){var g=ingById(r.ing);if(!g)return;var q=ist(g,pdv);if(!q)return;var u=r6(i.qty*r.q);q.cur=r6(q.cur-u);q.used=r6(q.used+u)});
+    (p.recipe||[]).forEach(function(r){var g=ingById(r.ing);if(!g)return;var q=ist(g,pdv);if(!q)return;var u=i.qty*r.g;q.cur=r6(q.cur-u);q.used=r6(q.used+u)});
   });
   if(SYNC_ON)Sync.settle(stockKeys(U.cart,pdv));
   S.sales.unshift(sale);logEv('sale','Vente N° '+pad(no)+' : '+fmt(sale.total)+' FC');save();resetSale();
   U.tab='sale';render();showTicket(sale,true);
 }
-function packUse(pr,qty,pdv){
-  var t=((pr&&pr.pack)||[]).filter(function(x){return x.up>0}).sort(function(a,b){return a.up-b.up});
-  if(pdv&&t.length>1){var av=t.filter(function(x){var g=ingById(x.ing),q=g&&ist(g,pdv);return !q||q.cur>0});if(av.length&&av.length<t.length)t=av}
-  if(!t.length||!(qty>0))return [];
-  var L=t[t.length-1],full=Math.floor(qty/L.up),rem=qty-full*L.up,bags={};
-  if(full)bags[L.ing]=full;
-  if(rem>0){var x=t.find(function(y){return rem<=y.up});bags[x.ing]=(bags[x.ing]||0)+1}
-  return Object.keys(bags).map(function(k){return {ing:k,q:r6(bags[k]/qty)}});
-}
-function lineUse(pr,qty,pdv){return ((pr&&pr.recipe)||[]).map(function(r){return {ing:r.ing,q:r.g}}).concat(packUse(pr,qty,pdv))}
-function stockKeys(items,pdv){var k=[];items.forEach(function(i){k.push('stock/p:'+i.id+':'+pdv);var pr=prodById(i.id);((pr&&pr.recipe||[]).concat((pr&&pr.pack)||[])).concat(pr?[]:(i.use||[]).map(function(u){return {ing:u.ing}})).forEach(function(r){k.push('istock/i:'+r.ing+':'+pdv)})});return k}
+function stockKeys(items,pdv){var k=[];items.forEach(function(i){k.push('stock/p:'+i.id+':'+pdv);var pr=prodById(i.id);((pr&&pr.recipe)||(i.use||[]).map(function(u){return {ing:u.ing}})).forEach(function(r){k.push('istock/i:'+r.ing+':'+pdv)})});return k}
 function resetSale(){U.cart=[];U.client=undefined;U.cq='';U.usePoints=false;U.unlocked=false;U.pts='';U.cash='';U.keep=false}
 
 function breakdown(id){
@@ -718,8 +637,7 @@ function topbar(){
 function navHTML(){
   var t=[['sale','Vente'],['clients','Clients'],['products','Produits'],['stock','Stock'],['reports','Rapports']];
   if(U.user.role==='owner')t.push(['manage','Gestion']);else t.push(['cash','Caisse']);
-  var sa=U.user.role==='owner'?stockAlerts().list:[],sred=sa.some(function(x){return x.l.state==='red'});
-  return t.map(function(x){return '<button data-a="tab" data-v="'+x[0]+'"'+(U.tab===x[0]?' aria-current="page"':'')+'><svg viewBox="0 0 24 24" aria-hidden="true">'+ICON[x[0]]+'</svg>'+x[1]+(x[0]==='stock'&&sa.length?'<span aria-label="Stock bas" style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:4px;background:'+(sred?'#d92d20':'#f79009')+'"></span>':'')+'</button>'}).join('');
+  return t.map(function(x){return '<button data-a="tab" data-v="'+x[0]+'"'+(U.tab===x[0]?' aria-current="page"':'')+'><svg viewBox="0 0 24 24" aria-hidden="true">'+ICON[x[0]]+'</svg>'+x[1]+'</button>'}).join('');
 }
 
 /* vente */
@@ -849,10 +767,8 @@ function clientsView(){
 var RESET_TTL=30*60000;
 function resetActive(r){if(!(r.status==='pending'||(r.status==='approved'&&Date.now()-r.approvedAt<RESET_TTL)))return false;return !S.resets.some(function(x){return x.id!==r.id&&x.custId===r.custId&&x.status==='done'&&(x.doneAt||x.approvedAt||0)>=r.ts})}
 function resetOf(cid){return S.resets.filter(function(r){return r.custId===cid&&resetActive(r)})[0]}
-function lockReqBanner(){return S.users.filter(function(u){return u.locked&&u.unlockReq}).map(function(u){return '<div class="note pts" style="margin-top:12px"><b>Demande de reconnexion</b> : '+esc(u.name)+' ('+tstr(Date.parse(u.unlockReq))+')<button class="btn sm primary" style="margin-top:8px" data-a="unlockSeller" data-id="'+u.id+'">Autoriser la reconnexion</button></div>'}).join('')}
 function resetBanner(){
-  if(U.user&&U.user.role==='owner')return lockReqBanner()+scBanner()+stockBanner();
-  if(!U.user)return '';
+  if(!U.user||U.user.role==='owner')return '';
   return S.resets.filter(function(r){return r.status==='approved'&&resetActive(r)&&r.pdvId===U.user.pdvId}).map(function(r){var c=custById(r.custId);
     return '<div class="note pts" style="margin-top:12px"><b>Réinitialisation autorisée</b> pour '+esc(c?c.name:'?')+' (valable '+Math.max(1,Math.ceil((RESET_TTL-(Date.now()-r.approvedAt))/60000))+' min).<button class="btn sm primary" style="margin-top:8px" data-a="doReset" data-id="'+r.id+'">Le client choisit son nouveau code</button></div>'}).join('');
 }
@@ -888,7 +804,6 @@ function clientDetailHTML(id){
     h+='</div>';
   }
   h+='<div class="stack" style="margin-top:16px"><button class="btn primary wide" data-a="useClient" data-id="'+id+'">Utiliser pour une vente</button>';
-  if(owner)h+='<button class="btn wide" data-a="editClient" data-id="'+id+'">Modifier le nom ou le numéro</button>';
   if(owner)h+='<button class="btn wide" data-a="resetOwner" data-id="'+id+'">Réinitialiser le code secret (identité vérifiée)</button>';
   else{var rq=resetOf(id);
     if(!rq)h+='<button class="btn wide" data-a="reqReset" data-id="'+id+'">Demander la réinitialisation du code</button>';
@@ -953,18 +868,6 @@ function recipeHTML(){
   }).join('');
   return top+rows+'<button class="btn sm" style="margin-top:12px" data-a="radd">+ Ajouter un intrant</button>';
 }
-function packLabels(){
-  var u=M.pack.map(function(r,i){return {i:i,up:parseInt(r.up,10)||0}}).filter(function(x){return x.up>0}).sort(function(a,b){return a.up-b.up}),prev=0,m={};
-  u.forEach(function(x){m[x.i]=x.up>prev?(prev+1===x.up?'S’applique à '+x.up+' unité seulement':'S’applique de '+(prev+1)+' à '+x.up+' unités'):'';prev=Math.max(prev,x.up)});
-  M.pack.forEach(function(r,i){var el=$('#pl'+i);if(el)el.textContent=m[i]||''});
-}
-function packHTML(){
-  var opts=function(sel){return S.ingredients.map(function(g){return '<option value="'+g.id+'"'+(g.id===sel?' selected':'')+'>'+esc(g.name)+'</option>'}).join('')};
-  if(!S.ingredients.length)return '<div class="hint">Créez d’abord l’emballage comme intrant (Stock → Nouvel intrant).</div>';
-  return M.pack.map(function(r,i){return '<div class="rrow" style="margin-top:6px"><select class="sel" data-c="psel" data-idx="'+i+'" aria-label="Emballage">'+opts(r.ing)+'</select>'
-    +'<input class="inp" inputmode="numeric" data-i="pu" data-idx="'+i+'" value="'+esc(r.up||'')+'" placeholder="jusqu’à (unités)" aria-label="Jusqu’à combien d’unités">'
-    +'<button class="btn sm" data-a="pdel" data-idx="'+i+'" aria-label="Retirer">✕</button></div><div class="hint" id="pl'+i+'"></div>'}).join('')+'<button class="btn sm" style="margin-top:10px" data-a="padd">+ Ajouter un palier d’emballage</button>';
-}
 function prodFormHTML(p){
   var isNew=!p;p=p||{name:'',price:'',cost:'',b:0,p1:0,p2:0};
   var f=function(id,l,v,ph){return '<label class="lbl" for="'+id+'">'+l+'</label><input id="'+id+'" class="inp" inputmode="decimal" data-i="dn" value="'+esc(String(v).replace('.',','))+'"'+(ph?' placeholder="'+ph+'"':'')+'>'};
@@ -977,7 +880,6 @@ function prodFormHTML(p){
       +S.pdvs.map(function(pd){return f('st_'+pd.id,'PDV '+esc(pd.name),'','vide = non suivi')}).join('');
   }else h+='<div class="note" style="margin-top:14px">Pour ajouter du stock, utilisez l’onglet Stock.</div>';
   h+='<div class="sub-h" style="margin-top:18px">Intrants par unité vendue (g, ml ou nombre, selon l’intrant)</div><div class="hint">Pour chaque intrant, vous choisissez s’il se mesure en grammes, en millilitres ou en nombre (par exemple des sachets de lait). Pour chaque ligne, saisissez la quantité par unité vendue (décimales acceptées, ex. 3,21) ou la quantité consommée pour un lot entier : l’application divise alors par la taille du lot. La consommation réelle est comparée à la consommation prévue, avec une marge d’erreur de '+S.margin+' %.</div><div id="recipeBox"></div>'
-   +'<div class="sub-h" style="margin-top:18px">Emballage selon la quantité achetée (facultatif)</div><div class="hint">Indiquez la limite haute de chaque emballage : petit = 1, grand = 4. L’application affiche la plage obtenue (grand : de 2 à 4). Un emballage ne sert que dans sa plage ; s’il est épuisé, l’application utilise automatiquement l’autre (petits pour chaque pain si les grands manquent, grands si les petits manquent) : le grand n’est jamais utilisé pour 1 pain si le petit existe. Le plus grand emballage sert pour chaque tranche complète (ex. 4 pains), puis le reste prend le palier qui convient (5 pains = 1 grand + 1 petit, 6 pains = 2 grands). Les sacs sont des intrants (en nombre).</div><div id="packBox"></div>'
    +'<div class="row" style="margin-top:18px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="saveProd" data-id="'+(p.id||'')+'">Enregistrer</button></div>'
    +(p.id?'<button class="btn danger wide" style="margin-top:10px" data-a="delProd" data-id="'+p.id+'">Supprimer le produit</button>':'');
   return h;
@@ -986,16 +888,15 @@ function prodFormHTML(p){
 /* stock */
 function stockPdv(){return U.user.role==='owner'?(U.spdv||U.user.pdvId):U.user.pdvId}
 function stockView(){
-  if(U.user.role==='owner'&&U.sall)return stockOverviewHTML();
   var owner=U.user.role==='owner',pdv=stockPdv(),pd=pdvById(pdv);
   var h='<h2 style="font-size:22px;margin-top:18px">Stock</h2>';
-  if(owner)h+='<label class="lbl" for="spdv">Point de vente</label><select id="spdv" class="sel" data-c="spdv"><option value="*">Tous les points de vente</option>'+S.pdvs.map(function(p){return '<option value="'+p.id+'"'+(p.id===pdv?' selected':'')+'>'+esc(p.name)+'</option>'}).join('')+'</select>';
+  if(owner)h+='<label class="lbl" for="spdv">Point de vente</label><select id="spdv" class="sel" data-c="spdv">'+S.pdvs.map(function(p){return '<option value="'+p.id+'"'+(p.id===pdv?' selected':'')+'>'+esc(p.name)+'</option>'}).join('')+'</select>';
   else h+='<p class="hint" style="margin:8px 0 0">Stock du PDV '+esc(pd?pd.name:'')+' (consultation).</p>';
-  h+=stockBanner()+'<h2 class="h">Produits (unités)</h2><div class="card">'+S.products.map(function(p){
+  h+='<h2 class="h">Produits (unités)</h2><div class="card">'+S.products.map(function(p){
     var s=st(p,pdv);
     return '<div class="item"><div class="grow"><div style="font-weight:600;overflow-wrap:anywhere">'+esc(p.name)+'</div>'+(owner?'<div class="small muted">Achat '+fmt(p.cost||0)+' FC</div>':'')+'</div>'
       +(s===null?'<span class="chip">Non suivi</span>':'<span class="chip '+(s<=LOW?'bad':'good')+'">'+s+' unité(s)'+(s<=LOW?' · stock bas':'')+'</span>')
-      +(owner?'<button class="btn sm" data-a="addStock" data-kind="p" data-id="'+p.id+'">+ Stock</button> <button class="btn sm" data-a="cntFlag" data-kind="p" data-id="'+p.id+'">'+(p.cnt?'✓ À chaque clôture':'Compter à la clôture')+'</button>':'')+'</div>'}).join('')+'</div>';
+      +(owner?'<button class="btn sm" data-a="addStock" data-kind="p" data-id="'+p.id+'">+ Stock</button>':'')+'</div>'}).join('')+'</div>';
   h+='<div class="row sp" style="margin-top:22px"><h2 class="h" style="margin:0 2px">Intrants</h2>'+(owner?'<button class="btn sm" data-a="newIng">Nouvel intrant</button>':'')+'</div>'
    +'<p class="hint" style="margin:8px 0 10px">Marge d’erreur acceptée : '+S.margin+' %. Comptez le stock réel pour la vérifier.</p><div class="card">'
    +S.ingredients.map(function(g){
@@ -1003,31 +904,17 @@ function stockView(){
      var lcChip=lc?'<span class="chip '+(lc.ok?'good':'bad')+'">Écart '+(lc.pct>0?'+':'')+dec(lc.pct)+' %'+(lc.ok?' · dans la marge':' · hors marge')+'</span>':'';
      return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(g.name)+'</div>'
        +(s?'<div class="num" style="font:600 18px var(--font-head)">'+qf(g,s.cur)+'</div><div class="small muted">Consommé depuis le dernier comptage : '+qf(g,s.used)+'</div><div style="margin-top:6px">'+lcChip+'</div>':'<div class="small muted">Non suivi dans ce point de vente</div>')+'</div>'
-       +(owner?'<div class="stack" style="gap:6px"><button class="btn sm" data-a="addStock" data-kind="i" data-id="'+g.id+'">+ Ajouter</button>'+(s?'<button class="btn sm" data-a="countIng" data-id="'+g.id+'">Compter</button>':'')+'<button class="btn sm" data-a="cntFlag" data-id="'+g.id+'">'+(g.cnt?'✓ À chaque clôture':'Compter à la clôture')+'</button>'+'<button class="btn sm danger" data-a="delIngAsk" data-id="'+g.id+'">Supprimer</button></div>':'')+'</div>'}).join('')+'</div>';
+       +(owner?'<div class="stack" style="gap:6px"><button class="btn sm" data-a="addStock" data-kind="i" data-id="'+g.id+'">+ Ajouter</button>'+(s?'<button class="btn sm" data-a="countIng" data-id="'+g.id+'">Compter</button>':'')+'</div>':'')+'</div>'}).join('')+'</div>';
   var mv=S.moves.filter(function(m){return m.pdv===pdv}).slice(0,5);
   if(mv.length)h+='<h2 class="h">Derniers ajouts</h2><div class="card">'+mv.map(function(m){var o=m.kind==='p'?prodById(m.id):ingById(m.id);return '<div class="item"><div class="grow small">'+esc(o?o.name:'?')+'<div class="muted">'+dstr(m.ts)+' '+tstr(m.ts)+'</div></div><b class="good num">+'+qn(m.qty,2)+(m.kind==='i'?' '+unit(o):'')+'</b></div>'}).join('')+'</div>';
   return h;
 }
 function pdvSelect(id,def){return '<label class="lbl" for="'+id+'">Point de vente</label><select id="'+id+'" class="sel">'+S.pdvs.map(function(p){return '<option value="'+p.id+'"'+(p.id===def?' selected':'')+'>'+esc(p.name)+'</option>'}).join('')+'</select>'}
-function stockMultiHTML(kind,id){
-  var o=kind==='p'?prodById(id):ingById(id);if(!o)return '';
-  var unitTxt=kind==='p'?'unités':unitName(unit(o));
-  return '<h3>Stock de plusieurs points de vente</h3><div class="muted" style="margin:-6px 0 8px">'+esc(o.name)+' · '+unitTxt+'</div>'
-   +'<label class="lbl" for="smm">Ce que vous saisissez</label><select id="smm" class="sel"><option value="add">S’ajoute au stock actuel</option><option value="set">Remplace le stock actuel (niveau exact)</option></select>'
-   +'<label class="lbl" for="sma" style="margin-top:10px">Même quantité pour tous les points de vente</label><div class="row" style="gap:8px"><input id="sma" class="inp grow" inputmode="decimal" placeholder="0"><button class="btn" data-a="smFill">Appliquer à tous</button></div><div class="hint" style="margin-top:6px">Les cases se remplissent : vous pouvez ensuite changer la quantité d’un point de vente précis.</div>'
-   +(S.pdvs.length>6?'<input id="smq" type="search" class="inp" style="margin-top:10px" data-i="smq" autocomplete="off" placeholder="Rechercher un point de vente">':'')
-   +'<div class="card" style="margin-top:10px;max-height:50vh;overflow:auto">'+S.pdvs.map(function(pd){
-      var cur=kind==='p'?st(o,pd.id):(ist(o,pd.id)?ist(o,pd.id).cur:null);
-      return '<div class="item smrow" data-n="'+esc(pd.name)+'"><div class="grow"><div style="font-weight:600">'+esc(pd.name)+'</div><div class="small muted">Actuel : '+(cur===null?'non suivi':(kind==='p'?qn(cur,0)+' unité(s)':qf(o,cur)))+'</div></div>'
-       +'<input class="inp smi" style="width:110px" inputmode="decimal" placeholder="0" data-pdv="'+pd.id+'" aria-label="Quantité pour '+esc(pd.name)+'"></div>'}).join('')+'</div>'
-   +'<div class="hint" style="margin-top:8px">Laissez vide les points de vente à ne pas modifier.</div>'
-   +'<div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="saveMulti" data-kind="'+kind+'" data-id="'+id+'">Enregistrer</button></div>';
-}
 function stockAddHTML(kind,id){
   var o=kind==='p'?prodById(id):ingById(id);
   return '<h3>Ajouter du stock</h3><div class="muted" style="margin:-6px 0 6px">'+esc(o.name)+'</div>'+pdvSelect('sap',stockPdv())
    +'<label class="lbl" for="saq">Quantité à ajouter ('+(kind==='p'?'unités':unitName(unit(o)))+')</label><input id="saq" class="inp" inputmode="decimal" placeholder="0">'
-   +(S.pdvs.length>1?'<button class="btn wide" style="margin-top:12px" data-a="stockMulti" data-kind="'+kind+'" data-id="'+id+'">Saisir plusieurs points de vente à la fois</button>':'')+'<div class="row" style="margin-top:18px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="saveStock" data-kind="'+kind+'" data-id="'+id+'">Ajouter</button></div>';
+   +'<div class="row" style="margin-top:18px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="saveStock" data-kind="'+kind+'" data-id="'+id+'">Ajouter</button></div>';
 }
 function countHTML(id){
   var g=ingById(id);
@@ -1176,10 +1063,7 @@ function manageGen(){
    +(br.logo?'<div class="paper" style="margin-top:10px"><img src="'+br.logo+'" alt="Logo" style="display:block;margin:0 auto;width:'+Math.min(100,Math.round((br.lw||384)/384*100))+'%;height:auto;image-rendering:pixelated"></div><button class="btn wide" style="margin-top:8px" data-a="rmLogo">Retirer le logo</button>':'')
    +'<div class="hint" style="margin-top:8px">Le logo est réduit à 384 points de large (58 mm) et converti en noir et blanc pour l’imprimante thermique. Le logo s’imprime en haut du ticket et la devise en bas.</div></div>';
   h+='<h2 class="h">Intrants</h2><div class="card"><label class="lbl" for="mg">Marge d’erreur de consommation (%)</label><div class="row"><input id="mg" class="inp grow" inputmode="decimal" data-i="dn" value="'+String(S.margin).replace('.',',')+'"><button class="btn primary" data-a="saveMargin">Enregistrer</button></div>'
-   +'<div class="hint" style="margin-top:6px">Un comptage dont l’écart dépasse cette marge déclenche une alerte.</div>'
-   +'<div class="sub-h" style="margin-top:14px">Personnes de confiance pour le comptage</div>'+(S.counters.length?'<div style="margin-bottom:8px">'+S.counters.map(function(n,i){return '<span class="chip">'+esc(n)+' <button class="btn sm" style="padding:0 6px" data-a="ctDel" data-idx="'+i+'" aria-label="Retirer '+esc(n)+'">✕</button></span>'}).join(' ')+'</div>':'')
-   +'<div class="row"><input id="ctn" class="inp grow" maxlength="40" placeholder="Nom (ex. Marie)"><button class="btn primary" data-a="ctAdd">Ajouter</button></div>'
-   +'<div class="hint" style="margin-top:6px">À chaque clôture de caisse, une tâche « Stock à compter » vous attend. Les intrants marqués « Compter à la clôture » (onglet Stock) y figurent ; si aucun n’est marqué, tous y figurent.</div></div>';
+   +'<div class="hint" style="margin-top:6px">Un comptage dont l’écart dépasse cette marge déclenche une alerte.</div></div>';
   h+='<h2 class="h">Points de vente</h2><div class="card">'+S.pdvs.map(function(p){var sl=S.users.filter(function(u){return u.role==='seller'&&u.pdvId===p.id});return '<div class="item"><div class="grow"><b>'+esc(p.name)+'</b><div class="small muted">'+(sl.length?sl.map(function(u){return esc(u.name)}).join(' · '):'Aucun vendeur')+'</div></div><button class="btn sm danger" data-a="delPdv" data-id="'+p.id+'">Supprimer</button></div>'}).join('')
    +'<label class="lbl" for="npdv">Nouveau point de vente</label><div class="row"><input id="npdv" class="inp grow" placeholder="Nom du point de vente"><button class="btn primary" data-a="addPdv">Ajouter</button></div></div>';
   if(SYNC_ON)h+='<h2 class="h">Page client</h2><div class="card"><div class="hint" style="margin:0 0 8px">Vos clients consultent leur solde sur ce lien avec leur numéro et leur code secret.</div><input id="clink" class="inp" readonly value="'+esc(clientLink())+'"><button class="btn wide" style="margin-top:10px" data-a="copyLink">Copier le lien</button></div>';
@@ -1237,105 +1121,19 @@ function cashView(){
   if(mine.length)out+='<h2 class="h">Mes dernières clôtures</h2><div class="card">'+mine.map(shiftRow).join('')+'</div>';
   return out;
 }
-function shiftDetailHTML(h){
-  var ss=shiftSales(h),wd=shiftWd(h),pd=pdvById(h.pdvId),tot=0,cash=0,pts=0,keep=0;
-  ss.forEach(function(x){tot+=x.total;cash+=x.cashNet;pts+=x.pointsUsed||0;keep+=x.kept||0});
-  var wt=0;wd.forEach(function(w){wt+=w.amount});
-  var exp=h.state==='closed'?h.expected:expectedCash(h);
-  var row=function(l,v,c){return '<div class="item"><div class="grow muted">'+l+'</div><b class="num '+(c||'')+'">'+v+'</b></div>'};
-  var o='<h3>Flux de caisse</h3><div class="muted small">'+esc(h.name)+' · PDV '+esc(pd?pd.name:'')+'<br>'+dstr(h.openTs)+' · '+tstr(h.openTs)+' → '+(h.closeTs?tstr(h.closeTs):'en cours')+'</div><div class="card" style="margin-top:12px">'
-   +row('Fond de caisse de départ',fmt(h.float)+' FC')
-   +row('+ Espèces encaissées ('+ss.length+' ticket'+(ss.length>1?'s':'')+')','+'+fmt(cash)+' FC','good')
-   +row('− Retraits du propriétaire ('+wd.length+')','−'+fmt(wt)+' FC',wt?'bad':'')
-   +row('= Attendu en caisse',fmt(exp)+' FC')
-   +(h.state==='closed'?row('Compté par le vendeur',h.counted==null?'—':fmt(h.counted)+' FC')+(h.diff==null?'':row('Écart',(h.diff>0?'+':'')+fmt(h.diff)+' FC',h.diff<0?'bad':h.diff>0?'pts':'good')):'')+'</div>'
-   +'<div class="card" style="margin-top:12px">'+row('Total des ventes',fmt(tot)+' FC')+row('dont payé en points',fmt(pts)+' FC')+row('Monnaie transformée en points',fmt(keep)+' FC')+'</div>';
-  var mv=[];ss.forEach(function(x){mv.push({ts:x.ts,t:'Vente N° '+pad(x.no)+(x.custName?' · '+esc(x.custName):''),a:x.cashNet,sub:(x.pointsUsed?'payée en partie en points ('+fmt(x.pointsUsed)+')':'')+(x.change>0?(x.pointsUsed?' · ':'')+'monnaie rendue '+fmt(x.change-x.kept):'')})});
-  wd.forEach(function(w){mv.push({ts:w.ts,t:'Retrait du propriétaire',a:-w.amount,sub:w.note?esc(w.note):''})});
-  mv.sort(function(a,b){return a.ts-b.ts});var run=h.float;
-  o+='<div class="sub-h">Mouvements d’espèces</div><div class="card"><div class="item"><div class="grow small muted">'+tstr(h.openTs)+' · Fond de caisse de départ</div><b class="num">'+fmt(h.float)+' FC</b></div>'
-   +(mv.length?mv.map(function(m){run=r2(run+m.a);return '<div class="item" style="align-items:flex-start"><div class="grow small"><div>'+tstr(m.ts)+' · '+m.t+'</div>'+(m.sub?'<div class="muted">'+m.sub+'</div>':'')+'</div><div style="text-align:right"><b class="num '+(m.a<0?'bad':'good')+'">'+(m.a<0?'−':'+')+fmt(Math.abs(m.a))+'</b><div class="small muted num">solde '+fmt(run)+'</div></div></div>'}).join(''):'<div class="muted small" style="padding:8px 0">Aucun mouvement pour le moment.</div>')+'</div>';
-  if(false&&wd.length)o+='<div class="sub-h">Retraits pendant ce service</div><div class="card">'+wd.map(function(w){return '<div class="item"><div class="grow small">'+tstr(w.ts)+(w.note?'<div class="muted">'+esc(w.note)+'</div>':'')+'</div><b class="num">−'+fmt(w.amount)+' FC</b></div>'}).join('')+'</div>';
-  if(h.sc)o+=h.sc.st==='p'?'<div class="sub-h">Comptage du stock</div><div class="note" style="background:#eef4ff;color:#1d4ed8">Stock pas encore compté pour ce service.<button class="btn sm primary" style="margin-top:8px" data-a="scOpen" data-id="'+h.id+'">Saisir le comptage</button></div>':scDoneHTML(h);
-  o+='<div class="hint" style="margin-top:8px">Les retraits sont enregistrés par point de vente : ils comptent pour le vendeur en service à ce moment-là.</div><button class="btn wide" style="margin-top:12px" data-a="closeModal">Fermer</button>';
-  return o;
-}
-function shiftRow(h,adm){
+function shiftRow(h){
   var d=h.diff,chip=h.forced?'<span class="chip">Clôturé par le propriétaire</span>':(d===0?'<span class="chip good">Caisse juste</span>':'<span class="chip bad">'+(d>0?'Excédent +':'Manque ')+fmt(Math.abs(d))+' FC</span>');
-  if(h.sc)chip+=' '+(h.sc.st==='p'?'<span class="chip">Stock à compter</span>':(h.sc.rows.some(function(r){return !r.ok})?'<span class="chip bad">Écart de stock</span>':'<span class="chip good">Stock juste</span>'));
   return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(h.name)+'</div><div class="small muted">'+dstr(h.openTs)+' · '+tstr(h.openTs)+' → '+tstr(h.closeTs)+'</div>'
-   +'<div class="small num muted">Attendu '+fmt(h.expected)+' · Compté '+(h.counted==null?'—':fmt(h.counted))+(h.float!==h.suggested?' · fond déclaré '+fmt(h.float)+' (prévu '+fmt(h.suggested)+')':'')+'</div></div><div class="stack">'+chip+(adm?'<button class="btn sm" data-a="shiftDetail" data-id="'+h.id+'">Détail</button>':'')+'</div></div>';
-}
-function scList(h){
-  var all=S.ingredients.filter(function(g){return ist(g,h.pdvId)}),fl=all.filter(function(g){return g.cnt});
-  return fl.length?fl:all;
-}
-function scProds(h){
-  var all=S.products.filter(function(p){return st(p,h.pdvId)!==null}),fl=all.filter(function(p){return p.cnt});
-  return fl.length?fl:all;
-}
-function scCalcP(h,p,cnt){
-  var T=h.closeTs||Date.now(),ls=0,la=0;
-  S.sales.forEach(function(x){if(x.pdvId!==h.pdvId||x.cancelled||x.ts<=T)return;(x.items||[]).forEach(function(it){if(it.id===p.id)ls+=it.qty})});
-  S.moves.forEach(function(m){if(m.kind==='p'&&m.id===p.id&&m.pdv===h.pdvId&&m.ts>T)la+=m.qty});
-  var exp=(st(p,h.pdvId)||0)+ls-la,diff=cnt-exp;
-  return {kind:'p',p:p,cnt:cnt,exp:exp,diff:diff,ok:diff===0,ls:ls,la:la};
-}
-function scChip(r){
-  if(r.kind==='p')return '<span class="chip '+(r.ok?'good':'bad')+'">'+(r.ok?'Juste':(r.diff>0?'+':'')+r.diff+' unité'+(Math.abs(r.diff)>1?'s':''))+'</span>';
-  return '<span class="chip '+(r.ok?'good':'bad')+'">'+(r.pct>0?'+':'')+dec(r.pct)+' %</span>';
-}
-function scCalc(h,g,cnt){
-  var s=ensureIng(g,h.pdvId),T=h.closeTs||Date.now(),lu=0,la=0;
-  S.sales.forEach(function(x){if(x.pdvId!==h.pdvId||x.cancelled||x.ts<=T)return;(x.items||[]).forEach(function(it){(it.use||[]).forEach(function(u){if(u.ing===g.id)lu+=it.qty*u.q})})});
-  S.moves.forEach(function(m){if(m.kind==='i'&&m.id===g.id&&m.pdv===h.pdvId&&m.ts>T)la+=m.qty});
-  lu=r6(lu);la=r6(la);
-  var theo=r6(s.used-lu),added=r6(s.added-la),actual=r6(s.open+added-cnt),dev=actual-theo;
-  var pct=theo>0?dev/theo*100:(dev===0?0:100);
-  return {g:g,cnt:cnt,theo:theo,actual:actual,pct:pct,ok:Math.abs(pct)<=S.margin,lu:lu,la:la};
-}
-function scPending(){return S.shifts.filter(function(h){return h.state==='closed'&&h.sc&&h.sc.st==='p'&&Date.now()-h.closeTs<14*864e5}).sort(function(a,b){return a.closeTs-b.closeTs})}
-function scBanner(){
-  var l=scPending();if(!l.length)return '';
-  return '<div class="note" style="margin-top:12px;background:#eef4ff;color:#1d4ed8"><b>Stock à compter ('+l.length+')</b>'+l.slice(0,4).map(function(h){var pd=pdvById(h.pdvId);
-    return '<div class="row sp" style="margin-top:6px"><div class="small">'+esc(h.name)+' · '+esc(pd?pd.name:'')+' · clôturé '+dstr(h.closeTs)+' '+tstr(h.closeTs)+'</div><button class="btn sm" data-a="scOpen" data-id="'+h.id+'">Saisir</button></div>'}).join('')+(l.length>4?'<div class="small" style="margin-top:6px">…et '+(l.length-4)+' autre(s) (Gestion → Caisse).</div>':'')+'</div>';
-}
-function scHTML(h,v){
-  v=v||{};var pd=pdvById(h.pdvId),late=Date.now()-h.closeTs>3*36e5,me=U.user.name||'Propriétaire';
-  var by=v.by||'__me',opts='<option value="__me"'+(by==='__me'?' selected':'')+'>Moi, '+esc(me)+'</option>'+S.counters.map(function(n){return '<option value="'+esc(n)+'"'+(by===n?' selected':'')+'>'+esc(n)+'</option>'}).join('')+'<option value="__other"'+(by==='__other'?' selected':'')+'>Autre personne…</option>';
-  return '<h3>Comptage du stock</h3><div class="muted small">'+esc(h.name)+' · PDV '+esc(pd?pd.name:'')+'<br>Service clôturé le '+dstr(h.closeTs)+' à '+tstr(h.closeTs)+'</div>'
-   +(late?'<div class="note bad" style="margin-top:10px">Ce comptage date de plus de 3 heures. Les ventes faites depuis la clôture sont retirées automatiquement, mais vérifiez les réapprovisionnements faits depuis.</div>':'')
-   +'<label class="lbl" for="scby">Compté par</label><select id="scby" class="sel" data-c="scby">'+opts+'</select><input id="scbo" class="inp" style="margin-top:6px;'+(by==='__other'?'':'display:none')+'" placeholder="Nom de la personne" maxlength="40" value="'+esc(v.other||'')+'">'
-   +'<div class="hint" style="margin-top:10px">Saisissez les quantités comptées à la clôture. Laissez vide ce qui n’a pas été compté.</div><div class="card" style="margin-top:8px;max-height:46vh;overflow:auto">'
-   +scList(h).map(function(g){return '<div class="item"><div class="grow"><div style="font-weight:600">'+esc(g.name)+'</div><div class="small muted">en '+unitName(unit(g))+'</div></div><input class="inp sci" style="width:110px" inputmode="decimal" placeholder="0" data-ing="'+g.id+'" value="'+esc((v.vals&&v.vals[g.id])||'')+'" aria-label="Quantité comptée de '+esc(g.name)+'"></div>'}).join('')+'</div>'
-   +(scProds(h).length?'<div class="hint" style="margin-top:10px">Produits (en unités entières)</div><div class="card" style="margin-top:8px">'+scProds(h).map(function(q){return '<div class="item"><div class="grow"><div style="font-weight:600">'+esc(q.name)+'</div><div class="small muted">unités</div></div><input class="inp sci" style="width:110px" inputmode="numeric" placeholder="0" data-prod="'+q.id+'" value="'+esc((v.vals&&v.vals[q.id])||'')+'" aria-label="Quantité comptée de '+esc(q.name)+'"></div>'}).join('')+'</div>':'')
-   +'<div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Plus tard</button><button class="btn primary grow" data-a="scReview" data-id="'+h.id+'">Vérifier</button></div>';
-}
-function scDoneHTML(h){
-  var c=h.sc;return '<div class="sub-h">Comptage du stock</div><div class="small muted" style="margin-bottom:6px">Compté par '+esc(c.by)+' · saisi le '+dstr(c.ts)+' à '+tstr(c.ts)+'</div><div class="card">'+c.rows.map(function(r){return '<div class="item"><div class="grow"><div style="font-weight:600">'+esc(r.name)+'</div><div class="small muted num">'+(r.kind==='p'?'Compté '+r.cnt+' · prévu '+r.exp+' unités':'Compté '+qn(r.cnt,2)+' · prévu '+qn(r.theo,2)+' consommé')+'</div></div>'+scChip(r)+'</div>'}).join('')+'</div>';
+   +'<div class="small num muted">Attendu '+fmt(h.expected)+' · Compté '+(h.counted==null?'—':fmt(h.counted))+(h.float!==h.suggested?' · fond déclaré '+fmt(h.float)+' (prévu '+fmt(h.suggested)+')':'')+'</div></div>'+chip+'</div>';
 }
 function finishShift(h,counted,forced){
-  h.closeTs=Date.now();h.expected=expectedCash(h);h.counted=forced?null:counted;h.diff=forced?null:r2(counted-h.expected);h.forced=!!forced;h.state='closed';if(scList(h).length||scProds(h).length)h.sc={st:'p'};
+  h.closeTs=Date.now();h.expected=expectedCash(h);h.counted=forced?null:counted;h.diff=forced?null:r2(counted-h.expected);h.forced=!!forced;h.state='closed';
   logEv('shift_close','Clôture de caisse de '+h.name+' : attendu '+fmt(h.expected)+' FC'+(forced?' (clôture forcée)':', compté '+fmt(counted)+' FC, écart '+fmt(h.diff)+' FC'));
 }
-function liveCashInner(){
-  var open=S.shifts.filter(function(h){return h.state==='open'}),T={f:0,i:0,o:0,e:0};
-  var rows=open.map(function(h){var ss=shiftSales(h),i=0,o=0;ss.forEach(function(x){i+=x.cashNet});shiftWd(h).forEach(function(w){o+=w.amount});
-    var e=expectedCash(h);T.f+=h.float;T.i+=i;T.o+=o;T.e+=e;var pd=pdvById(h.pdvId);
-    return '<button class="rowbtn" data-a="shiftDetail" data-id="'+h.id+'"><div class="grow"><div style="font-weight:600">'+esc(h.name)+'</div><div class="small muted">PDV '+esc(pd?pd.name:'')+' · depuis '+tstr(h.openTs)+' · '+ss.length+' ticket(s)</div>'
-     +'<div class="small num muted">Fond '+fmt(h.float)+' · <span class="good">+'+fmt(i)+'</span> · <span class="bad">−'+fmt(o)+'</span></div></div><div style="text-align:right"><div class="small muted">En caisse</div><b class="num">'+fmt(e)+' FC</b></div></button>'}).join('');
-  var st=typeof Sync!=='undefined'&&Sync.ST?Sync.ST():null;
-  return '<div class="card">'+(open.length?rows
-   +'<div class="item" style="border-top:2px solid var(--line,#ddd)"><div class="grow"><b>Total de tous les vendeurs</b><div class="small num muted">Fonds '+fmt(T.f)+' · <span class="good">+'+fmt(T.i)+'</span> · <span class="bad">−'+fmt(T.o)+'</span></div></div><div style="text-align:right"><b class="num" style="font-size:18px">'+fmt(T.e)+' FC</b></div></div>'
-   :'<div class="muted">Aucun vendeur en service.</div>')
-   +'<div class="hint" style="margin-top:8px">Touchez un vendeur pour voir le détail de ses mouvements. Fond de départ, <b>+</b> espèces encaissées, <b>−</b> retraits. Mise à jour automatique toutes les quelques secondes'+(st&&st.last?' (dernier échange '+tstr(st.last)+')':'')+'.</div></div>';
-}
-function liveCashHTML(){return '<h2 class="h">Caisse en temps réel</h2><div id="liveCash">'+liveCashInner()+'</div>'}
-function refreshLive(){if(!(U.user&&U.user.role==='owner'))return;var e=document.getElementById('liveCash');if(e)e.innerHTML=liveCashInner();var e2=document.getElementById('stockOv');if(e2&&U.sall)e2.innerHTML=stockOvList();var nv=document.getElementById('nav');if(nv&&nv.offsetParent!==null)nv.innerHTML=navHTML()}
 function cashAdminView(){
   var open=S.shifts.filter(function(h){return h.state==='open'});
-  var h=liveCashHTML()+'<h2 class="h">Services en cours</h2><div class="card">'+(open.length?open.map(function(x){var pd=pdvById(x.pdvId),ss=shiftSales(x);
-    return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(x.name)+'</div><div class="small muted">PDV '+esc(pd?pd.name:'')+' · depuis '+tstr(x.openTs)+' · '+ss.length+' ticket(s)</div><div class="small num muted">Fond '+fmt(x.float)+' · attendu en caisse '+fmt(expectedCash(x))+' FC</div></div><div class="stack"><button class="btn sm" data-a="shiftDetail" data-id="'+x.id+'">Détail</button><button class="btn sm danger" data-a="forceClose" data-id="'+x.id+'">Clôturer</button></div></div>'}).join(''):'<div class="muted">Aucun vendeur en service.</div>')+'</div>';
+  var h='<h2 class="h">Services en cours</h2><div class="card">'+(open.length?open.map(function(x){var pd=pdvById(x.pdvId),ss=shiftSales(x);
+    return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(x.name)+'</div><div class="small muted">PDV '+esc(pd?pd.name:'')+' · depuis '+tstr(x.openTs)+' · '+ss.length+' ticket(s)</div><div class="small num muted">Fond '+fmt(x.float)+' · attendu en caisse '+fmt(expectedCash(x))+' FC</div></div><button class="btn sm danger" data-a="forceClose" data-id="'+x.id+'">Clôturer</button></div>'}).join(''):'<div class="muted">Aucun vendeur en service.</div>')+'</div>';
   h+='<h2 class="h">Fond de caisse</h2><div class="card">'+S.pdvs.map(function(pd){return '<div class="item"><div class="grow">PDV '+esc(pd.name)+'</div><b class="num">'+fmt(suggestedFloat(pd.id))+' FC</b></div>'}).join('')
    +'<div class="hint" style="margin:6px 0">Montant prévu pour le prochain vendeur : ce que le vendeur précédent a compté, moins vos retraits. Vous pouvez le fixer vous-même.</div>'
    +pdvSelect('fpd',S.pdvs[0]&&S.pdvs[0].id)+'<label class="lbl" for="ffa">Nouveau fond de caisse (FC)</label><div class="row"><input id="ffa" class="inp grow" inputmode="decimal" data-i="dn"><button class="btn primary" data-a="setFloat">Définir</button></div></div>';
@@ -1347,26 +1145,17 @@ function cashAdminView(){
   var gap={};cl.forEach(function(x){if(x.diff!=null&&Date.now()-x.closeTs<30*864e5){gap[x.name]=(gap[x.name]||0)+x.diff}});
   var gk=Object.keys(gap);
   h+='<h2 class="h">Écarts sur 30 jours</h2><div class="card">'+(gk.length?gk.map(function(k){var v=r2(gap[k]);return '<div class="item"><div class="grow">'+esc(k)+'</div><b class="num '+(v<0?'bad':v>0?'pts':'good')+'">'+(v>0?'+':'')+fmt(v)+' FC</b></div>'}).join(''):'<div class="muted">Aucune clôture.</div>')+'</div>';
-  h+='<h2 class="h">Dernières clôtures</h2><div class="card">'+(cl.length?cl.slice(0,15).map(function(x){return shiftRow(x,1)}).join(''):'<div class="muted">Aucune clôture pour le moment.</div>')+'</div>';
+  h+='<h2 class="h">Dernières clôtures</h2><div class="card">'+(cl.length?cl.slice(0,15).map(shiftRow).join(''):'<div class="muted">Aucune clôture pour le moment.</div>')+'</div>';
   return h;
 }
-function sellerMatch(u){var n=norm(U.sq||''),d=digits(U.sq||''),f=U.sf||'all';
-  if(n&&norm(u.name).indexOf(n)<0&&!(d&&digits(u.phone).indexOf(d)>=0))return false;
-  if(f==='open')return !!openShift(u.id);if(f==='locked')return !!u.locked;return true}
-function sellerListHTML(){
-  var h='',filt=!!(U.sq||(U.sf&&U.sf!=='all'));
-  S.pdvs.forEach(function(pd){
-    var us=S.users.filter(function(u){return u.role==='seller'&&u.pdvId===pd.id&&sellerMatch(u)});if(filt&&!us.length)return;
-    h+='<div class="card" style="margin-top:12px"><div class="sub-h" style="margin-top:0">PDV '+esc(pd.name)+'</div>'+(us.length?us.map(function(u){var sh=openShift(u.id);
-      return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(u.name)+'</div><div class="small muted num">'+esc(u.phone)+' · '+(u.shift==='matin'?'matin':'soir')+'</div><div class="small '+(sh?'good':'muted')+'">'+(sh?'Service ouvert depuis '+tstr(sh.openTs):'Hors service')+'</div>'+(u.locked?'<div class="small bad"><b>Verrouillé</b>'+(u.unlockReq?' · demande de reconnexion à '+tstr(Date.parse(u.unlockReq)):' · aucune demande')+'</div>':'')+'</div><div class="stack"><button class="btn sm" data-a="pwSeller" data-id="'+u.id+'">Mot de passe</button><button class="btn sm" data-a="phoneAsk" data-id="'+u.id+'">Numéro</button>'+(SYNC_ON?(u.locked?'<button class="btn sm primary" data-a="unlockSeller" data-id="'+u.id+'">Autoriser la reconnexion</button>':'<button class="btn sm" data-a="forceOutSeller" data-id="'+u.id+'">Déconnecter</button><button class="btn sm" data-a="lockAsk" data-id="'+u.id+'">Verrouiller</button>'):'')+'<button class="btn sm danger" data-a="delSeller" data-id="'+u.id+'">Supprimer</button></div></div>'}).join(''):'<div class="muted">Aucun vendeur.</div>')+'</div>';
-  });
-  if(filt&&!h)h='<div class="note" style="margin-top:12px">Aucun vendeur ne correspond.</div>';
-  return h}
 function staffView(){
-  var h=lockReqBanner()+'<h2 class="h">Mon compte</h2><div class="card"><div class="item"><div class="grow"><div style="font-weight:600">Propriétaire</div><div class="small muted num">'+esc((userById(U.user.id)||{}).phone||'')+'</div></div><div class="stack"><button class="btn sm" data-a="phoneAsk" data-id="'+U.user.id+'">Changer mon numéro</button><button class="btn sm" data-a="pwSeller" data-id="'+U.user.id+'">Changer mon mot de passe</button></div></div></div>';
-  var sf=U.sf||'all',chip=function(k,l){return '<button class="btn sm'+(sf===k?' primary':'')+'" data-a="sfilter" data-v="'+k+'">'+l+'</button>'};
-  h+='<h2 class="h">Comptes des vendeurs</h2><input id="sq" type="search" class="inp" data-i="sq" autocomplete="off" enterkeyhint="done" placeholder="Rechercher un vendeur (nom ou numéro)" aria-label="Rechercher un vendeur" value="'+esc(U.sq||'')+'">'
-   +'<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap" id="sellerChips">'+chip('all','Tous')+chip('open','Service ouvert')+chip('locked','Verrouillés')+'</div><div id="sellerList">'+sellerListHTML()+'</div>';
+  var h='<h2 class="h">Mon compte</h2><div class="card"><div class="item"><div class="grow"><div style="font-weight:600">Propriétaire</div><div class="small muted num">'+esc((userById(U.user.id)||{}).phone||'')+'</div></div><div class="stack"><button class="btn sm" data-a="phoneAsk" data-id="'+U.user.id+'">Changer mon numéro</button><button class="btn sm" data-a="pwSeller" data-id="'+U.user.id+'">Changer mon mot de passe</button></div></div></div>';
+  h+='<h2 class="h">Comptes des vendeurs</h2>';
+  S.pdvs.forEach(function(pd){
+    var us=S.users.filter(function(u){return u.role==='seller'&&u.pdvId===pd.id});
+    h+='<div class="card" style="margin-top:12px"><div class="sub-h" style="margin-top:0">PDV '+esc(pd.name)+'</div>'+(us.length?us.map(function(u){var sh=openShift(u.id);
+      return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(u.name)+'</div><div class="small muted num">'+esc(u.phone)+' · '+(u.shift==='matin'?'matin':'soir')+'</div><div class="small '+(sh?'good':'muted')+'">'+(sh?'Service ouvert depuis '+tstr(sh.openTs):'Hors service')+'</div></div><div class="stack"><button class="btn sm" data-a="pwSeller" data-id="'+u.id+'">Mot de passe</button><button class="btn sm" data-a="phoneAsk" data-id="'+u.id+'">Numéro</button>'+(SYNC_ON?'<button class="btn sm" data-a="forceOutSeller" data-id="'+u.id+'">Déconnecter</button>':'')+'<button class="btn sm danger" data-a="delSeller" data-id="'+u.id+'">Supprimer</button></div></div>'}).join(''):'<div class="muted">Aucun vendeur.</div>')+'</div>';
+  });
   h+='<h2 class="h">Créer un compte vendeur</h2><div class="card"><label class="lbl" for="nsn">Nom</label><input id="nsn" class="inp" maxlength="40">'
    +'<label class="lbl" for="nsp">Numéro de téléphone (identifiant)</label><input id="nsp" class="inp" inputmode="tel">'
    +'<label class="lbl" for="nspw">Mot de passe (6 caractères minimum)</label>'+pwField('nspw')+''
@@ -1387,13 +1176,13 @@ function manageView(){
 }
 function startSession(u,silent){
   U.user={id:u.id,name:u.name,role:u.role==='owner'?'owner':u.shift,pdvId:u.role==='owner'?(U.lpdv||(S.pdvs[0]&&S.pdvs[0].id)||null):u.pdvId};
-  S.session={uid:u.id,pdvId:U.user.pdvId};U.tab='sale';U.spdv=null;U.sall=false;resetSale();
+  S.session={uid:u.id,pdvId:U.user.pdvId};U.tab='sale';U.spdv=null;resetSale();
   if(!silent){logEv('login','Connexion');ping()}
   save();render();window.scrollTo(0,0);
 }
 function logoutNow(){if(U.user)logEv('logout','Déconnexion');U.user=null;S.session=null;resetSale();save();render();if(SYNC_ON)Sync.logout()}
-var STOCK_ACT={scConfirm:1,delIngDo:1,saveMulti:1,addStock:1,saveStock:1,saveProd:1,delProd:1,saveIng:1,saveCount:1,countIng:1};
-var OWNER_ONLY={scOpen:1,scReview:1,scBack:1,scConfirm:1,cntFlag:1,ctAdd:1,ctDel:1,smFill:1,delIngAsk:1,delIngDo:1,stockMulti:1,saveMulti:1,stockItem:1,stockGo:1,slowToggle:1,lockAsk:1,lockDo:1,unlockSeller:1,shiftDetail:1,editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
+var STOCK_ACT={addStock:1,saveStock:1,saveProd:1,delProd:1,saveIng:1,saveCount:1,countIng:1};
+var OWNER_ONLY={newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
 
 /* rendu général */
 function tabView(){
@@ -1429,7 +1218,6 @@ var A={
       }).catch(function(er){
         if(er&&er.status===400){f.n++;if(f.n>=5){f.until=Date.now()+300000;f.n=0}U.fails[ph]=f}
         if(er&&er.halt)return;
-        if(er&&er.locked){openModal('<h3>Compte verrouillé</h3><p class="muted">Le propriétaire a verrouillé votre compte. Envoyez-lui une demande : vous pourrez vous reconnecter dès qu’il l’aura autorisée.</p><div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Fermer</button><button class="btn primary grow" data-a="askUnlock">Demander l’autorisation</button></div>');return}
         toast(Sync.msg(er),'bad');
       }).then(function(){var b2=$('[data-a=login]');if(b2){b2.disabled=false;b2.textContent='Ouvrir la session'}});
       return;
@@ -1472,64 +1260,6 @@ var A={
     if(!btn.dataset.ok){btn.dataset.ok='1';btn.textContent='Confirmer';return}
     if(SYNC_ON){Sync.rpc('delete_user',{p_id:u.id}).then(function(){logEv('seller_del','Compte vendeur supprimé : '+u.name);save();return Sync.profiles()}).then(function(){render();toast('Compte supprimé.')}).catch(function(er){toast(Sync.msg(er),'bad')});return}
     S.users=S.users.filter(function(x){return x.id!==u.id});logEv('seller_del','Compte vendeur supprimé : '+u.name);save();render();toast('Compte supprimé.')},
-  sfilter:function(d){U.sf=d.v;$('#sellerList').innerHTML=sellerListHTML();var c=$('#sellerChips');if(c)c.querySelectorAll('[data-a=sfilter]').forEach(function(b){b.classList.toggle('primary',b.dataset.v===U.sf)})},
-  stockMulti:function(d){openModal(stockMultiHTML(d.kind,d.id))},
-  smFill:function(){var v=(($('#sma')||{}).value||'').trim();if(!v){toast('Saisissez d’abord la quantité commune.');return}
-    if(isNaN(parseDec(v))||parseDec(v)<0){toast('Quantité invalide.','bad');return}
-    var n=0;document.querySelectorAll('.smi').forEach(function(el){var row=el.closest('.smrow');if(row&&row.style.display==='none')return;el.value=v;n++});
-    toast('Quantité appliquée à '+n+' point'+(n>1?'s':'')+' de vente.')},
-  saveMulti:function(d){
-    var o=d.kind==='p'?prodById(d.id):ingById(d.id);if(!o)return;
-    var set=($('#smm')||{}).value==='set',n=0,bad=false;
-    document.querySelectorAll('.smi').forEach(function(el){
-      var raw=el.value.trim();if(!raw)return;var q=parseDec(raw);if(isNaN(q)||q<0||(!set&&q===0)){bad=true;return}
-      if(d.kind==='p')q=Math.round(q);var pdv=el.dataset.pdv;
-      if(d.kind==='p'){o.stock=o.stock||{};o.ref=o.ref||{};if(set){o.stock[pdv]=q}else{o.stock[pdv]=(o.stock[pdv]||0)+q}o.ref[pdv]=o.stock[pdv]}
-      else{var s=ensureIng(o,pdv);if(set){s.open=q;s.cur=q;s.added=0;s.used=0}else{s.cur=r6(s.cur+q);s.added=r6(s.added+q)}}
-      if(!set)S.moves.unshift({ts:Date.now(),kind:d.kind,id:d.id,pdv:pdv,qty:q});
-      logEv('stock',(set?'Stock fixé : ':'Stock ajouté : ')+o.name+' '+(set?'=':'+')+q+' ('+((pdvById(pdv)||{}).name||'?')+')');n++});
-    if(bad){toast('Vérifiez les quantités saisies (nombres positifs).','bad');return}
-    if(!n){toast('Saisissez au moins une quantité.');return}
-    S.moves=S.moves.slice(0,30);save();closeModal();render();toast('Stock enregistré pour '+n+' point'+(n>1?'s':'')+' de vente.')},
-  scOpen:function(d){var h=S.shifts.find(function(x){return x.id===d.id});if(!h||!h.sc||h.sc.st!=='p')return;M.sc={id:h.id};openModal(scHTML(h))},
-  scReview:function(d){
-    var h=S.shifts.find(function(x){return x.id===d.id});if(!h||!h.sc||h.sc.st!=='p')return;
-    var sel=$('#scby').value,other=($('#scbo')||{}).value||'',vals={},rows=[],bad=false;
-    document.querySelectorAll('.sci').forEach(function(el){var raw=el.value.trim(),pr=el.dataset.prod;vals[pr||el.dataset.ing]=raw;if(!raw)return;
-      if(pr){if(!/^\d+$/.test(raw)){bad=true;return}rows.push(scCalcP(h,prodById(pr),parseInt(raw,10)));return}
-      var q=parseDec(raw);if(isNaN(q)||q<0){bad=true;return}rows.push(scCalc(h,ingById(el.dataset.ing),q))});
-    if(sel==='__other'&&!other.trim()){toast('Indiquez le nom de la personne qui a compté.');return}
-    if(bad){toast('Vérifiez les quantités saisies (nombres positifs).','bad');return}
-    if(!rows.length){toast('Saisissez au moins une quantité.');return}
-    var by=sel==='__me'?(U.user.name||'Propriétaire')+' (propriétaire)':sel==='__other'?other.trim():sel;
-    M.sc={id:h.id,by:by,vals:vals,sel:sel,other:other,rows:rows};
-    $('.sheet').innerHTML='<h3>Vérifiez avant de valider</h3><div class="muted small">Compté par '+esc(by)+'</div><div class="card" style="margin-top:10px;max-height:50vh;overflow:auto">'+rows.map(function(r){return '<div class="item"><div class="grow"><div style="font-weight:600">'+esc((r.p||r.g).name)+'</div><div class="small muted num">'+(r.kind==='p'?'Compté '+r.cnt+' · prévu '+r.exp+' unités':'Compté '+qf(r.g,r.cnt)+' · consommé prévu '+qf(r.g,r.theo))+'</div></div>'+scChip(r)+'</div>'}).join('')+'</div>'
-     +'<div class="row" style="margin-top:14px"><button class="btn grow" data-a="scBack" data-id="'+h.id+'">Corriger</button><button class="btn primary grow" data-a="scConfirm" data-id="'+h.id+'">Valider</button></div>'},
-  scBack:function(d){var h=S.shifts.find(function(x){return x.id===d.id});if(!h||!M.sc)return;$('.sheet').innerHTML=scHTML(h,{vals:M.sc.vals,by:M.sc.sel,other:M.sc.other})},
-  scConfirm:function(d){
-    var h=S.shifts.find(function(x){return x.id===d.id});if(!h||!h.sc||h.sc.st!=='p'||!M.sc||M.sc.id!==h.id)return;
-    var rows=M.sc.rows.map(function(r){return r.kind==='p'?scCalcP(h,r.p,r.cnt):scCalc(h,r.g,r.cnt)});
-    rows.forEach(function(r){
-      if(r.kind==='p'){r.p.stock=r.p.stock||{};r.p.stock[h.pdvId]=Math.max(0,r.cnt-r.ls+r.la);
-        logEv('count','Comptage de '+r.p.name+' ('+h.name+', par '+M.sc.by+') : '+(r.ok?'juste':(r.diff>0?'+':'')+r.diff+' unité(s) — HORS MARGE'));return}
-      var st2=ensureIng(r.g,h.pdvId);
-      S.counts.unshift({id:'k'+nid(),ts:Date.now(),ingId:r.g.id,pdvId:h.pdvId,theo:r.theo,actual:r.actual,pct:r.pct,ok:r.ok,by:M.sc.by,shiftId:h.id,seller:h.name,cts:h.closeTs});
-      st2.open=r.cnt;st2.added=r.la;st2.used=r.lu;st2.cur=r6(r.cnt+r.la-r.lu);
-      logEv('count','Comptage de '+r.g.name+' ('+h.name+', par '+M.sc.by+') : écart '+dec(r.pct)+' %'+(r.ok?'':' — HORS MARGE'))});
-    S.counts=S.counts.slice(0,200);
-    h.sc={st:'d',by:M.sc.by,ts:Date.now(),rows:rows.map(function(r){return r.kind==='p'?{kind:'p',ing:r.p.id,name:r.p.name,cnt:r.cnt,exp:r.exp,diff:r.diff,ok:r.ok}:{kind:'i',ing:r.g.id,name:r.g.name,cnt:r.cnt,theo:r.theo,pct:r.pct,ok:r.ok}})};
-    var bad=rows.filter(function(r){return !r.ok}).length;M.sc=null;save();closeModal();render();toast(bad?bad+' intrant(s) hors marge pour '+h.name+'.':'Comptage enregistré, tout est dans la marge.',bad?'bad':undefined)},
-  cntFlag:function(d){var g=d.kind==='p'?prodById(d.id):ingById(d.id);if(!g)return;if(g.cnt)delete g.cnt;else g.cnt=true;save();render()},
-  ctAdd:function(){var n=(($('#ctn')||{}).value||'').trim();if(!n){toast('Saisissez un nom.');return}if(S.counters.indexOf(n)>=0){toast('Ce nom existe déjà.');return}S.counters.push(n);save();render()},
-  ctDel:function(d){S.counters.splice(+d.idx,1);save();render()},
-  stockItem:function(d){openModal(stockItemHTML(d.kind,d.id))},
-  stockGo:function(d){closeModal();U.tab='stock';U.sall=false;U.spdv=d.p;render()},
-  slowToggle:function(){U.slow=!U.slow;render()},
-  askUnlock:function(){var ph=digits(($('#lph')||{}).value),pw=($('#lpw')||{}).value||'';if(!ph||!pw){toast('Saisissez votre numéro et votre mot de passe.');return}
-    Sync.requestUnlock(ph,pw).then(function(){closeModal();toast('Demande envoyée au propriétaire. Réessayez après son autorisation.')}).catch(function(er){toast(Sync.msg(er),'bad')})},
-  lockAsk:function(d){var u=userById(d.id);if(!u)return;openModal('<h3>Déconnecter et verrouiller</h3><p class="muted">'+esc(u.name)+' sera déconnecté tout de suite et ne pourra plus se reconnecter sans votre autorisation, même avec le bon mot de passe.</p><div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn danger grow" data-a="lockDo" data-id="'+u.id+'">Verrouiller</button></div>')},
-  lockDo:function(d){var u=userById(d.id);if(!u)return;Sync.rpc('lock_seller',{p_id:u.id}).then(function(){u.locked=true;u.unlockReq=null;logEv('seller_lock','Compte verrouillé : '+u.name);save();closeModal();render();toast('Compte verrouillé.')}).catch(function(er){toast(Sync.msg(er),'bad')})},
-  unlockSeller:function(d){var u=userById(d.id);if(!u)return;Sync.rpc('unlock_seller',{p_id:u.id}).then(function(){u.locked=false;u.unlockReq=null;logEv('seller_unlock','Reconnexion autorisée : '+u.name);save();render();toast(u.name+' peut se reconnecter.')}).catch(function(er){toast(Sync.msg(er),'bad')})},
   forceOutSeller:function(d){var u=userById(d.id);if(!u)return;Sync.rpc('force_logout',{p_id:u.id}).then(function(){logEv('seller_out','Déconnexion à distance : '+u.name);save();toast('Le vendeur sera déconnecté dans quelques secondes.')}).catch(function(er){toast(Sync.msg(er),'bad')})},
   phoneAsk:function(d){var u=userById(d.id);if(!u)return;openModal('<h3>Changer le numéro</h3><p class="muted" style="margin:0 0 10px">'+esc(u.role==='owner'?'Compte propriétaire':u.name)+' · actuellement '+esc(u.phone)+'</p><label class="lbl" for="nph">Nouveau numéro (identifiant de connexion)</label><input id="nph" class="inp" inputmode="tel"><div class="hint" style="margin-top:6px">Ce numéro devient l’identifiant de connexion. L’ancien ne fonctionnera plus.</div><div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="phoneDo" data-id="'+u.id+'">Enregistrer</button></div>')},
   phoneDo:function(d){var u=userById(d.id),ph=digits($('#nph').value);if(!u)return;
@@ -1610,29 +1340,14 @@ var A={
   reqReset:function(d){
     if(resetOf(d.id)){toast('Une demande est déjà en cours pour ce client.');return}
     S.resets.push({id:'q'+nid(),custId:d.id,ts:Date.now(),status:'pending',pdvId:U.user.pdvId});save();closeModal();toast('Demande envoyée au propriétaire.')},
-  shiftDetail:function(d){var h=S.shifts.find(function(x){return x.id===d.id});if(h)openModal(shiftDetailHTML(h))},
   resetOwner:function(d){closeModal();resetPinFlow(d.id,null)},
-  editClient:function(d){var c=custById(d.id);if(!c)return;
-    openModal('<h3>Modifier le client</h3><label class="lbl" for="en">Nom complet</label><input id="en" class="inp" autocomplete="off" value="'+esc(c.name)+'">'
-     +'<label class="lbl" for="ep">Numéro de téléphone</label><input id="ep" class="inp" inputmode="tel" autocomplete="off" value="'+esc(c.phone)+'">'
-     +'<div class="hint" style="margin-top:8px">Les points, l’historique, le parrain et le code secret ne changent pas. Le client se connecte à sa page avec le nouveau numéro.</div>'
-     +'<div class="row" style="margin-top:18px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="saveEditClient" data-id="'+c.id+'">Enregistrer</button></div>')},
-  saveEditClient:function(d){var c=custById(d.id);if(!c)return;
-    var name=$('#en').value.trim().replace(/\s+/g,' '),phone=$('#ep').value.trim();
-    if(name.length<3){toast('Saisissez le nom complet du client.');return}
-    if(digits(phone).length<9){toast('Le numéro de téléphone doit avoir 9 chiffres minimum.');return}
-    if(S.customers.some(function(x){return x.id!==c.id&&digits(x.phone).slice(-9)===digits(phone).slice(-9)})){toast('Ce numéro est déjà utilisé par un autre client.');return}
-    var old=c.name+' '+c.phone;c.name=name;c.phone=phone;
-    logEv('client_edit','Client modifié : '+old+' → '+name+' '+phone);save();closeModal();render();toast('Informations du client modifiées.')},
   approveReset:function(d){var r=S.resets.find(function(x){return x.id===d.id});if(r&&r.status==='pending'){r.status='approved';r.approvedAt=Date.now();logEv('reset','Réinitialisation de code autorisée');save();render();toast('Réinitialisation autorisée pour 30 minutes.')}},
   rejectReset:function(d){var r=S.resets.find(function(x){return x.id===d.id});if(r&&resetActive(r)){r.status='rejected';save();render();toast('Demande refusée.')}},
   doReset:function(d){var r=S.resets.find(function(x){return x.id===d.id});if(!r||r.status!=='approved'||!resetActive(r)){toast('Autorisation expirée ou absente.');closeModal();render();return}closeModal();resetPinFlow(r.custId,r.id)},
   /* produits */
-  newProd:function(){openModal(prodFormHTML());M.recipe=[];M.pack=[];M.batch='';$('#recipeBox').innerHTML=recipeHTML();$('#packBox').innerHTML=packHTML()},
-  padd:function(){M.pack.push({ing:S.ingredients[0].id,up:''});$('#packBox').innerHTML=packHTML();packLabels()},
-  pdel:function(d){M.pack.splice(+d.idx,1);$('#packBox').innerHTML=packHTML();packLabels()},
+  newProd:function(){openModal(prodFormHTML());M.recipe=[];M.batch='';$('#recipeBox').innerHTML=recipeHTML()},
   editProd:function(d){var p=prodById(d.id);openModal(prodFormHTML(p));M.batch=p.batch?String(p.batch):'';
-    M.recipe=(p.recipe||[]).map(function(r){var lotRow=r.mode==='l'&&r.raw!=null;return {ing:r.ing,mode:lotRow?'l':'u',g:String(lotRow?r.raw:r.g).replace('.',',')}});$('#recipeBox').innerHTML=recipeHTML();M.pack=(p.pack||[]).map(function(x){return {ing:x.ing,up:String(x.up)}});$('#packBox').innerHTML=packHTML();packLabels()},
+    M.recipe=(p.recipe||[]).map(function(r){var lotRow=r.mode==='l'&&r.raw!=null;return {ing:r.ing,mode:lotRow?'l':'u',g:String(lotRow?r.raw:r.g).replace('.',',')}});$('#recipeBox').innerHTML=recipeHTML()},
   radd:function(){M.recipe.push({ing:S.ingredients.length?S.ingredients[0].id:'__new',mode:'u',g:'',nn:'',nu:'g',nl:''});$('#recipeBox').innerHTML=recipeHTML()},
   rdel:function(d){M.recipe.splice(+d.idx,1);$('#recipeBox').innerHTML=recipeHTML()},
   saveProd:function(d){
@@ -1652,16 +1367,13 @@ var A={
     });
     var N=parseInt(M.batch,10),usesLot=M.recipe.some(function(r){return r.mode==='l'&&parseDec(r.g)>0});
     if(usesLot&&!(N>0)){toast('Saisissez la taille du lot.');return}
-    var pack=M.pack.map(function(x){return {ing:x.ing,up:parseInt(x.up,10)}}).filter(function(x){return x.up>0});
-    if(M.pack.length&&pack.length!==M.pack.length){toast('Indiquez « jusqu’à » combien d’unités pour chaque emballage.');return}
-    if(new Set(pack.map(function(x){return x.up})).size!==pack.length){toast('Deux emballages ont la même limite.');return}
     var recipe=[];
     M.recipe.forEach(function(r){var v=parseDec(r.g);if(!(v>0))return;
       if(r.mode==='l')recipe.push({ing:r.ing,mode:'l',raw:v,g:r6(v/N)});else recipe.push({ing:r.ing,mode:'u',raw:v,g:r6(v)})});
-    if(d.id){var p=prodById(d.id);var oldP=p.price;Object.assign(p,{name:name,price:price,cost:cost,b:b,p1:p1,p2:p2,recipe:recipe});if(pack.length)p.pack=pack;else delete p.pack;if(usesLot)p.batch=N;else delete p.batch}
+    if(d.id){var p=prodById(d.id);var oldP=p.price;Object.assign(p,{name:name,price:price,cost:cost,b:b,p1:p1,p2:p2,recipe:recipe});if(usesLot)p.batch=N;else delete p.batch}
     else{
       var stock={};S.pdvs.forEach(function(pd){var v=num('st_'+pd.id);if(!isNaN(v))stock[pd.id]=Math.round(v)});
-      var np={id:'r'+nid(),name:name,price:price,cost:cost,b:b,p1:p1,p2:p2,stock:stock,recipe:recipe};if(pack.length)np.pack=pack;if(usesLot)np.batch=N;S.products.push(np);
+      var np={id:'r'+nid(),name:name,price:price,cost:cost,b:b,p1:p1,p2:p2,stock:stock,recipe:recipe};if(usesLot)np.batch=N;S.products.push(np);
     }
     logEv('product',(d.id?'Produit modifié : ':'Produit créé : ')+name+' · prix '+fmt(price)+' FC'+(d.id&&oldP!==price?' (avant : '+fmt(oldP)+' FC)':''));
     save();closeModal();toast('Produit enregistré.');render();
@@ -1676,7 +1388,7 @@ var A={
     var q=numD('saq'),pdv=$('#sap').value;
     if(d.kind==='p')q=Math.round(q);
     if(!(q>0)){toast('Saisissez une quantité supérieure à 0.');return}
-    if(d.kind==='p'){var p=prodById(d.id);p.stock=p.stock||{};p.stock[pdv]=(p.stock[pdv]||0)+q;p.ref=p.ref||{};p.ref[pdv]=p.stock[pdv]}
+    if(d.kind==='p'){var p=prodById(d.id);p.stock=p.stock||{};p.stock[pdv]=(p.stock[pdv]||0)+q}
     else{var s=ensureIng(ingById(d.id),pdv);s.cur=r6(s.cur+q);s.added=r6(s.added+q)}
     var mo=d.kind==='p'?prodById(d.id):ingById(d.id);logEv('stock','Stock ajouté : '+(mo?mo.name:'?')+' +'+q);S.moves.unshift({ts:Date.now(),kind:d.kind,id:d.id,pdv:pdv,qty:q});S.moves=S.moves.slice(0,30);save();closeModal();toast('Stock ajouté.');render();
   },
@@ -1688,13 +1400,6 @@ var A={
     S.pdvs.forEach(function(pd){var v=numD('ig_'+pd.id);if(!isNaN(v))g.stock[pd.id]={cur:v,open:v,added:0,used:0}});
     S.ingredients.push(g);save();closeModal();toast('Intrant créé.');render();
   },
-  delIngAsk:function(d){var g=ingById(d.id);if(!g)return;
-    var used=S.products.filter(function(p){return (p.recipe||[]).concat(p.pack||[]).some(function(r){return r.ing===g.id})});
-    if(used.length){openModal('<h3>Suppression impossible</h3><p class="muted">« '+esc(g.name)+' » est utilisé dans la recette de '+used.length+' produit'+(used.length>1?'s':'')+' :</p><div class="card">'+used.map(function(p){return '<div class="item"><div class="grow">'+esc(p.name)+'</div></div>'}).join('')+'</div><p class="hint" style="margin-top:8px">Retirez d’abord cet intrant de ces recettes (Produits, Modifier), puis recommencez.</p><button class="btn primary wide" style="margin-top:12px" data-a="closeModal">Compris</button>');return}
-    openModal('<h3>Supprimer l’intrant</h3><p class="muted">Supprimer « '+esc(g.name)+' » et son stock dans tous les points de vente ? Cette action est définitive.</p><div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn danger grow" data-a="delIngDo" data-id="'+g.id+'">Supprimer</button></div>')},
-  delIngDo:function(d){var g=ingById(d.id);if(!g)return;
-    if(S.products.some(function(p){return (p.recipe||[]).some(function(r){return r.ing===g.id})})){toast('Cet intrant est encore utilisé dans une recette.','bad');return}
-    logEv('ingredient','Intrant supprimé : '+g.name);S.ingredients=S.ingredients.filter(function(x){return x.id!==g.id});save();closeModal();render();toast('Intrant supprimé.')},
   countIng:function(d){openModal(countHTML(d.id))},
   saveCount:function(d){
     var g=ingById(d.id),pdv=$('#cpd').value,cnt=numD('cnt');
@@ -1767,16 +1472,12 @@ document.addEventListener('click',function(e){
 });
 var I={
   pq:function(t){U.pq=t.value;$('#prodBox').innerHTML=prodHTML()},
-  sq:function(t){U.sq=t.value;$('#sellerList').innerHTML=sellerListHTML()},
-  smq:function(t){var q=norm(t.value);document.querySelectorAll('.smrow').forEach(function(r){r.style.display=(q&&norm(r.dataset.n).indexOf(q)<0)?'none':''})},
-  stq:function(t){U.stq=t.value;var e=$('#stockOv');if(e)e.innerHTML=stockOvList()},
   cq:function(t){U.cq=t.value;$('#cres').innerHTML=resultsHTML(U.cq,true)},
   cl:function(t){U.cl=t.value;$('#clientList').innerHTML=clientListHTML()},
   rs:function(t){var n=norm(t.value),r=n?S.customers.filter(function(c){return norm(c.name).indexOf(n)>=0}).slice(0,5):[];
     $('#spRes').innerHTML=r.length?r.map(function(c){return '<button class="rowbtn" data-a="pickSponsor" data-id="'+c.id+'"><div class="grow"><b>'+esc(c.name)+'</b><div class="small muted">'+esc(c.phone)+'</div></div></button>'}).join(''):(n?'<div class="hint">Aucun client trouvé : il sera enregistré sans parrain.</div>':'')},
   cash:function(t){var v=decIn(t.value);if(v!==t.value)t.value=v;U.cash=v;refreshCalc()},
   pts:function(t){var v=decIn(t.value);if(v!==t.value)t.value=v;U.pts=v;refreshCalc()},
-  pu:function(t){var v=digits(t.value);if(v!==t.value)t.value=v;M.pack[+t.dataset.idx].up=v;packLabels()},
   rnn:function(t){M.recipe[+t.dataset.idx].nn=t.value},
   rnl:function(t){var i=+t.dataset.idx,r=M.recipe[i];r.nl=t.value;var rg=$('#rg'+i),rm=$('#rm'+i);if(rg)rg.placeholder=rowUnit(r);if(rm)rm.textContent=rowHint(r)},
   rg:function(t){var i=+t.dataset.idx,v=t.value.replace(/[^0-9.,]/g,'');if(v!==t.value)t.value=v;M.recipe[i].g=v;var el=$('#rm'+i);if(el)el.textContent=rowHint(M.recipe[i])},
@@ -1792,9 +1493,7 @@ document.addEventListener('change',function(e){
   if(k==='blogo'){var fl=e.target.files&&e.target.files[0];if(fl)processLogo(fl,function(u,w,h){if(!u){toast('Image illisible.');return}var b=brand();b.logo=u;b.lw=w;b.lh=h;b.noLogo=false;save();render();toast('Logo enregistré.')})}
   if(k==='rpdv'){U.rpdv=e.target.value;render()}
   if(k==='rday'){U.rday=e.target.value;render()}
-  if(k==='spdv'){if(e.target.value==='*'){U.sall=true}else{U.sall=false;U.spdv=e.target.value}render()}
-  if(k==='scby'){var o2=$('#scbo');if(o2)o2.style.display=e.target.value==='__other'?'':'none';return}
-  if(k==='psel'&&M.pack){M.pack[+e.target.dataset.idx].ing=e.target.value;return}
+  if(k==='spdv'){U.spdv=e.target.value;render()}
   if((k==='rsel'||k==='rnu'||k==='rmo')&&M.recipe){var r0=M.recipe[+e.target.dataset.idx];
     if(k==='rsel')r0.ing=e.target.value;else if(k==='rnu')r0.nu=e.target.value;else r0.mode=e.target.value;
     $('#recipeBox').innerHTML=recipeHTML()}
@@ -1811,7 +1510,7 @@ window.addEventListener('offline',function(){setOnline(false)});
 /* ---------- synchronisation Supabase ---------- */
 var Sync=(function(){
   var SK='interkin-sync-v1',HALT={halt:1};
-  var ST=readSt(),busy=null,timer=null,needRender=false,refreshing=null,again=false,tick=0;
+  var ST=readSt(),busy=null,timer=null,needRender=false,refreshing=null;
   function rid(){return Math.random().toString(36).slice(2,10)}
   function readSt(){try{var o=JSON.parse(localStorage.getItem(SK));if(o&&o.v===1)return o}catch(e){}return {v:1,sid:'',base:{},cur:{},creds:{},auth:null,rej:[],last:0}}
   function writeSt(){try{localStorage.setItem(SK,JSON.stringify(ST))}catch(e){}}
@@ -1834,7 +1533,7 @@ var Sync=(function(){
     function add(coll,id,pdv,data){R[coll+'/'+id]={coll:coll,id:id,pdv:pdv||null,data:data,h:cyrb53(stab(data))}}
     S.pdvs.forEach(function(p){add('pdvs',p.id,null,p)});
     S.products.forEach(function(p){var d=Object.assign({},p);delete d.stock;add('products',p.id,null,d);
-      Object.keys(p.stock||{}).forEach(function(k){if(p.stock[k]!=null)add('stock','p:'+p.id+':'+k,k,(p.ref&&p.ref[k]>0)?{cur:p.stock[k],ref:p.ref[k]}:{cur:p.stock[k]})})});
+      Object.keys(p.stock||{}).forEach(function(k){if(p.stock[k]!=null)add('stock','p:'+p.id+':'+k,k,{cur:p.stock[k]})})});
     S.ingredients.forEach(function(g){var d=Object.assign({},g);delete d.stock;add('ingredients',g.id,null,d);
       Object.keys(g.stock||{}).forEach(function(k){if(g.stock[k])add('istock','i:'+g.id+':'+k,k,g.stock[k])})});
     S.customers.forEach(function(c){add('customers',c.id,null,c)});
@@ -1846,7 +1545,7 @@ var Sync=(function(){
     Object.keys(S.floats||{}).forEach(function(k){add('floats',k,k,S.floats[k])});
     S.counts.forEach(function(x){add('counts',x.id,x.pdvId,x)});
     ['log','positions','moves','merges'].forEach(function(c){(S[c]||[]).forEach(function(x){add(c,'x'+cyrb53(stab(x)),x.pdvId||x.pdv,x)})});
-    add('config','main',null,{margin:S.margin,geoEnabled:S.geoEnabled,brand:S.brand||null,counters:S.counters||[]});
+    add('config','main',null,{margin:S.margin,geoEnabled:S.geoEnabled,brand:S.brand||null});
     return R;
   }
   function find(arr,id){for(var i=0;i<arr.length;i++)if(arr[i].id===id)return i;return -1}
@@ -1856,9 +1555,9 @@ var Sync=(function(){
       if(del){if(i>=0)arr.splice(i,1);return}
       var o=Object.assign({},d);o.stock=i>=0?arr[i].stock:{};if(i>=0)arr[i]=o;else arr.push(o);return}
     if(c==='stock'||c==='istock'){var pt=id.split(':'),ob=(c==='stock'?prodById:ingById)(pt[1]);if(!ob)return;
-      ob.stock=ob.stock||{};if(del)delete ob.stock[pt[2]];else{ob.stock[pt[2]]=c==='stock'?d.cur:d;if(c==='stock'&&d.ref>0){ob.ref=ob.ref||{};ob.ref[pt[2]]=d.ref}}return}
+      ob.stock=ob.stock||{};if(del)delete ob.stock[pt[2]];else ob.stock[pt[2]]=c==='stock'?d.cur:d;return}
     if(c==='floats'){if(del)delete S.floats[id];else S.floats[id]=d;return}
-    if(c==='config'){if(d.margin!=null)S.margin=d.margin;if(d.geoEnabled!=null)S.geoEnabled=d.geoEnabled;if(d.brand)S.brand=d.brand;if(d.counters)S.counters=d.counters;return}
+    if(c==='config'){if(d.margin!=null)S.margin=d.margin;if(d.geoEnabled!=null)S.geoEnabled=d.geoEnabled;if(d.brand)S.brand=d.brand;return}
     if(ARR[c]){arr=S[ARR[c]];i=find(arr,id);if(del){if(i>=0)arr.splice(i,1)}else if(i>=0)arr[i]=d;else arr.push(d);return}
     if(ARR0[c]&&!del)S[ARR0[c]].push(d);
   }
@@ -1904,7 +1603,7 @@ var Sync=(function(){
       var el=$('#net');if(el)el.innerHTML=netHTML();if(U.user&&U.tab==='sale'&&$('#payBox'))refreshPay()}
     else{var el2=$('#net');if(el2)el2.innerHTML=netHTML()}
   }
-  function toUser(p){return {id:p.id,name:p.name,phone:p.phone,role:p.role,shift:p.shift||undefined,pdvId:p.pdv_id||null,locked:!!p.locked,unlockReq:p.unlock_req||null}}
+  function toUser(p){return {id:p.id,name:p.name,phone:p.phone,role:p.role,shift:p.shift||undefined,pdvId:p.pdv_id||null}}
 
   /* ----- connexion ----- */
   function login(phone,pw){
@@ -1914,8 +1613,6 @@ var Sync=(function(){
       return call('GET','/rest/v1/profiles?id=eq.'+j.user.id+'&select=*');
     }).then(function(rows){
       var p=rows&&rows[0];if(!p||!p.active)throw nerr('Ce compte est désactivé.',403);
-      if(p.locked){ST.lk=ST.lk||{};ST.lk[phone]=1;ST.auth=null;writeSt();var le=nerr('Compte verrouillé par le propriétaire.',423);le.locked=true;throw le}
-      if(ST.lk)delete ST.lk[phone];
       ST.auth.profile=p;
       if(p.role==='seller')return call('POST','/rest/v1/rpc/claim_session',{}).then(function(e){ST.auth.epoch=e;return p});
       ST.auth.epoch=p.epoch;return p;
@@ -1923,7 +1620,6 @@ var Sync=(function(){
       ST.creds[phone]={h:hashPw(pw,'dev'),uid:ST.auth.uid,rt:ST.auth.rt,epoch:ST.auth.epoch,profile:p};writeSt();
       return {user:toUser(p),online:true};
     },function(e){
-      if(e.locked)throw e;
       if(!e.status)return offlineLogin(phone,pw);
       ST.auth=null;
       if(e.status===400||e.status===401||e.status===422)throw nerr('Numéro ou mot de passe incorrect.',400);
@@ -1933,14 +1629,8 @@ var Sync=(function(){
   }
   function offlineLogin(phone,pw){
     var c=ST.creds[phone];
-    if(ST.lk&&ST.lk[phone]){var le=nerr('Compte verrouillé par le propriétaire.',423);le.locked=true;throw le}
     if(c&&c.h===hashPw(pw,'dev')){ST.auth={uid:c.uid,phone:phone,at:null,rt:c.rt,exp:0,epoch:c.epoch,profile:c.profile,offline:true};writeSt();return {user:toUser(c.profile),online:false}}
     throw nerr('Pas de connexion Internet. Une première connexion avec Internet est nécessaire sur cet appareil.',0);
-  }
-  function requestUnlock(phone,pw){
-    return http('POST','/auth/v1/token?grant_type=password',{email:phone+'@interkin.app',password:pw},null,true).then(function(j){
-      return http('POST','/rest/v1/rpc/request_unlock',{},{Authorization:'Bearer '+j.access_token},true)},function(e){
-      if(e.status===400||e.status===401||e.status===422)throw nerr('Numéro ou mot de passe incorrect.',400);throw e});
   }
   function forceOut(m){
     var had=U.user;U.user=null;S.session=null;ST.auth=null;writeSt();resetSale();rawSave();render();
@@ -1957,15 +1647,14 @@ var Sync=(function(){
     if(a.profile.role==='seller')return call('GET','/rest/v1/profiles?id=eq.'+a.uid+'&select=*').then(function(rows){
       var p=rows&&rows[0];
       if(!p||!p.active){forceOut('Votre compte a été désactivé.');throw HALT}
-      if(p.locked){ST.lk=ST.lk||{};ST.lk[a.phone]=1;forceOut('Votre compte a été verrouillé par le propriétaire. Pour vous reconnecter, demandez-lui son autorisation.');throw HALT}
-      if(p.epoch!==a.epoch){if(ST.creds)delete ST.creds[a.phone];forceOut('Session fermée : votre compte a été ouvert sur un autre appareil ou fermé par le propriétaire.');throw HALT}
+      if(p.epoch!==a.epoch){forceOut('Session fermée : votre compte a été ouvert sur un autre appareil ou fermé par le propriétaire.');throw HALT}
       a.profile=p;S.users=[toUser(p)];rawSave();
     });
     return profiles();
   }
   function profiles(){
     return call('GET','/rest/v1/profiles?select=*&order=created_at.asc').then(function(rows){
-      var sg=JSON.stringify(S.users);S.users=rows.filter(function(p){return p.active}).map(toUser);if(JSON.stringify(S.users)!==sg)needRender=true;rawSave();return S.users});
+      S.users=rows.filter(function(p){return p.active}).map(toUser);rawSave();return S.users});
   }
 
   /* ----- envoi ----- */
@@ -2053,12 +1742,12 @@ var Sync=(function(){
       .then(function(){ST.last=Date.now();writeSt();setNet(true);return chg});
   }
   function cycle(force){
-    if(busy){again=true;return busy}
+    if(busy)return busy;
     if(!ST.auth||(!U.user&&!force))return Promise.resolve();
     busy=run().then(function(ch){
-      busy=null;if(again){again=false;kick(200)}if(ch&&typeof refreshLive==='function')refreshLive();if(ch||needRender){if(U.user&&idle()){needRender=false;if(window.dbg)dbg('affichage rafraichi (synchro)');render()}else needRender=true}
+      busy=null;if(ch||needRender){if(U.user&&idle()){needRender=false;if(window.dbg)dbg('affichage rafraichi (synchro)');render()}else needRender=true}
     },function(e){
-      busy=null;if(again){again=false;kick(2000)}
+      busy=null;
       if(e===HALT)return;
       if(!e.status){setNet(false);return}
       if(e.expired&&U.user){forceOut('Votre connexion a expiré. Reconnectez-vous avec Internet.');return}
@@ -2067,10 +1756,10 @@ var Sync=(function(){
     });
     return busy;
   }
-  function kick(ms){if(!SYNC_ON||!ST.auth)return;clearTimeout(timer);timer=setTimeout(function(){timer=null;cycle()},ms==null?600:ms)}
+  function kick(ms){if(!SYNC_ON||!ST.auth)return;clearTimeout(timer);timer=setTimeout(function(){timer=null;cycle()},ms==null?1500:ms)}
   function start(){
     if(!SYNC_ON||api.started)return;api.started=true;
-    setInterval(function(){if(document.visibilityState==='hidden')return;var o=ST.auth&&ST.auth.profile&&ST.auth.profile.role==='owner';if(!o&&(tick++%2))return;cycle()},6000);
+    setInterval(function(){if(document.visibilityState!=='hidden')cycle()},12000);
     document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')kick(200)});
     kick(300);
   }
@@ -2104,7 +1793,7 @@ var Sync=(function(){
       +'<div class="item"><div class="grow muted">Ventes en attente d’envoi</div><b class="num">'+n+'</b></div>'
       +(rj.length?'<div class="note bad" style="margin-top:8px"><b>'+rj.length+' élément(s) refusé(s) par le serveur</b><div class="small">'+esc(rj[0].k+' : '+rj[0].msg)+'</div></div>':'');
   }
-  var api={ST:function(){return ST},setPin:setPin,requestUnlock:requestUnlock,login:login,logout:logout,first:first,kick:kick,start:start,init:init,settle:settle,rpc:rpc,profiles:profiles,msg:msg,
+  var api={ST:function(){return ST},setPin:setPin,login:login,logout:logout,first:first,kick:kick,start:start,init:init,settle:settle,rpc:rpc,profiles:profiles,msg:msg,
     pend:pendCount,statusHTML:statusHTML,cycle:function(){return cycle()},stockDirty:false,started:false,
     renamePhone:function(o,n){if(ST.creds[o]){ST.creds[n]=ST.creds[o];delete ST.creds[o]}if(ST.auth&&ST.auth.phone===o)ST.auth.phone=n;writeSt()},
     dirtyStock:function(){api.stockDirty=true;kick(400)},
@@ -2120,3 +1809,10 @@ render();
 Sync.start();
 })();
 </script>
+<script>
+if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
+  window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});
+}
+</script>
+</body>
+</html>
