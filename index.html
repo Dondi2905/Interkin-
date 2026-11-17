@@ -229,7 +229,7 @@ svg.map{background:var(--surface-2);border-radius:8px;border:1px solid var(--lin
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v49',APP_BUILD=39;
+var APP_VER='v50',APP_BUILD=39;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -1364,7 +1364,7 @@ function scCalcP(h,p,cnt){
   return {kind:'p',p:p,cnt:cnt,exp:exp,diff:diff,ok:diff===0,ls:ls,la:la};
 }
 function scChip(r){
-  if(r.kind==='p')return '<span class="chip '+(r.ok?'good':'bad')+'">'+(r.ok?'Juste':(r.diff>0?'+':'')+r.diff+' unité'+(Math.abs(r.diff)>1?'s':''))+'</span>';
+  if(r.kind==='p')return '<span class="chip '+(r.ok?'good':'bad')+'">'+(r.ok?'Juste':(r.diff<0?'Manque ':'Excédent +')+Math.abs(r.diff)+' unité'+(Math.abs(r.diff)>1?'s':''))+'</span>';
   return '<span class="chip '+(r.ok?'good':'bad')+'">'+eTxt(r)+'</span>';
 }
 function scCalc(h,g,cnt){
@@ -1593,7 +1593,7 @@ var A={
     var rows=M.sc.rows.map(function(r){return r.kind==='p'?scCalcP(h,r.p,r.cnt):scCalc(h,r.g,r.cnt)});
     rows.forEach(function(r){
       if(r.kind==='p'){r.p.stock=r.p.stock||{};r.p.stock[h.pdvId]=Math.max(0,r.cnt-r.ls+r.la);
-        logEv('count','Comptage de '+r.p.name+' ('+h.name+', par '+M.sc.by+') : '+(r.ok?'juste':(r.diff>0?'+':'')+r.diff+' unité(s) — HORS MARGE'));return}
+        logEv('count','Comptage de '+r.p.name+' ('+h.name+', par '+M.sc.by+') : '+(r.ok?'juste':(r.diff<0?'manque ':'excédent ')+Math.abs(r.diff)+' unité(s) — HORS MARGE'));return}
       var st2=ensureIng(r.g,h.pdvId);
       S.counts.unshift({id:'k'+nid(),ts:Date.now(),ingId:r.g.id,pdvId:h.pdvId,theo:r.theo,actual:r.actual,pct:r.pct,ok:r.ok,strict:r.strict,diff:r.diff,by:M.sc.by,shiftId:h.id,seller:h.name,cts:h.closeTs});
       st2.open=r.cnt;st2.added=r.la;st2.used=r.lu;st2.cur=r6(r.cnt+r.la-r.lu);
