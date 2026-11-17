@@ -229,7 +229,7 @@ svg.map{background:var(--surface-2);border-radius:8px;border:1px solid var(--lin
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v54',APP_BUILD=39;
+var APP_VER='v55',APP_BUILD=39;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -1206,7 +1206,23 @@ function waterReport(){
   return '<h2 class="h">Eau puisée · '+PERLAB[U.rper]+'</h2><div class="card">'
    +(any?'<div class="item"><div class="grow muted">Eau des tasses puisée</div><b class="num">'+k(dr)+'</b></div><div class="item"><div class="grow muted">Après ébullition</div><b class="num">'+k(net)+'</b></div><div class="item"><div class="grow muted">Perdue à l’ébullition</div><b class="num">'+k(dr-net)+(dr>0?' ('+qn((dr-net)/dr*100,1)+' %)':'')+'</b></div>':'')
    +(cl?'<div class="item"><div class="grow muted">Eau de nettoyage ('+ns+' service'+(ns>1?'s':'')+' × '+qn(cw,1)+' kg)</div><b class="num">'+k(cl)+'</b></div>':'')
-   +'<div class="item" style="border-top:2px solid var(--line,#ddd)"><div class="grow"><b>Total puisé</b></div><b class="num">'+k(dr+cl)+'</b></div></div>'}
+   +'<div class="item" style="border-top:2px solid var(--line,#ddd)"><div class="grow"><b>Total puisé</b></div><b class="num">'+k(dr+cl)+'</b></div></div>'+waterByShift(t0,cw)}
+function waterByShift(t0,cw){
+  var sh=S.shifts.filter(function(h){return h.openTs>=t0}).sort(function(a,b){return b.openTs-a.openTs}),by={},free=[];
+  S.ingredients.forEach(function(g){var f=unit(g)==='kg'?1:(unit(g)==='g'||unit(g)==='ml')?0.001:0;if(!f)return;(g.draws||[]).forEach(function(x){if(x.ts<t0-4*3600000)return;
+    var c=sh.filter(function(h){return h.pdvId===x.pdv}),best=null,bd=1e18;
+    c.forEach(function(h){var e=h.closeTs||Date.now();if(x.ts>=h.openTs&&x.ts<=e){best=h;bd=-1}else if(bd>=0){var d=Math.abs(h.openTs-x.ts);if(d<bd&&d<=4*3600000){best=h;bd=d}}});
+    if(best){var o=by[best.id]=by[best.id]||{dr:0,net:0};o.dr+=x.dr*f;o.net+=x.net*f}else if(x.ts>=t0)free.push(x)})});
+  if(!sh.length&&!Object.keys(by).length)return '';
+  var k=function(x){return qn(x,1)};
+  var rows=sh.slice(0,14).map(function(h){var o=by[h.id],pd=pdvById(h.pdvId),tot=(o?o.dr:0)+cw;
+    return '<div class="item" style="display:block"><div><b>'+dstr(h.openTs)+' · '+esc(pd?pd.name:'?')+'</b> <span class="muted small">'+esc(h.name||'')+'</span></div>'
+     +'<div class="small num muted">'+(o?'Tasses puisé '+k(o.dr)+' · après ébullition '+k(o.net)+' · perdu '+k(o.dr-o.net):'Eau des tasses non saisie')+(cw?' · nettoyage '+k(cw):'')+'</div>'
+     +'<div class="num"><b>Total puisé '+k(tot)+' kg</b></div></div>'}).join('');
+  var days={};sh.forEach(function(h){var key=dstr(h.openTs)+'|'+h.pdvId,o=by[h.id],d=days[key]=days[key]||{day:dstr(h.openTs),pdv:h.pdvId,n:0,t:0};d.n++;d.t+=(o?o.dr:0)+cw});
+  var drows=Object.keys(days).slice(0,10).map(function(key){var d=days[key],pd=pdvById(d.pdv);return '<div class="item"><div class="grow">'+d.day+' · '+esc(pd?pd.name:'?')+' <span class="muted small">('+d.n+' service'+(d.n>1?'s':'')+')</span></div><b class="num">'+k(d.t)+' kg</b></div>'}).join('');
+  return '<div class="sub-h" style="margin-top:14px">Eau puisée par service</div><div class="card">'+rows+'</div>'
+   +'<div class="sub-h" style="margin-top:14px">Total par jour et point de vente</div><div class="card">'+drows+'</div>'}
 function payInfo(uid,per){
   var t0=periodStart(per),ca=0,mq=0,ns=0,all=0,rp=0;
   live(S.sales).forEach(function(x){if(x.sellerId===uid&&x.ts>=t0)ca+=x.total});
