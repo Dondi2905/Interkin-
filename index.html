@@ -229,7 +229,7 @@ svg.map{background:var(--surface-2);border-radius:8px;border:1px solid var(--lin
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v50',APP_BUILD=39;
+var APP_VER='v52',APP_BUILD=39;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -1187,7 +1187,7 @@ function reportsView(){
     h+='<h2 class="h">Par vendeur</h2><div class="card">'+sellerList().map(function(sl){var pd=pdvById(sl.pdvId),l=live(S.sales).filter(function(x){return x.sellerId===sl.id}),
         q=agg(inPeriod(l,U.rper)),t3=['today','week','month'].map(function(per){return agg(inPeriod(l,per)).total});
       return '<button class="rowbtn" data-a="sdetail" data-id="'+sl.id+'" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(sl.name)+(sl.gone?' (supprimé)':'')+'</div><div class="small muted">'+(pd?'PDV '+esc(pd.name)+' · ':'')+q.n+' ticket(s)</div>'
-        +'<div class="small num muted" style="margin-top:3px">Jour '+fmt(t3[0])+' · Semaine '+fmt(t3[1])+' · Mois '+fmt(t3[2])+'</div></div><b class="num">'+fmt(q.total)+' FC</b></button>'}).join('')
+        +'<div class="small num muted" style="margin-top:3px">Jour '+fmt(t3[0])+' · Semaine '+fmt(t3[1])+' · Mois '+fmt(t3[2])+'</div>'+(function(){var pi=payInfo(sl.id,U.rper);return (pi.mq?'<div class="small num bad">Manque de caisse − '+fmt(pi.mq)+' · base '+fmt(pi.base)+' FC</div>':'')+(pi.rate?'<div class="small num">Rémunération '+fmt(pi.rem)+' FC ('+pi.rate+' %)</div>':'')+(pi.debt>0?'<div class="small num bad">Dette de caisse '+fmt(pi.debt)+' FC</div>':'')})()+'</div><b class="num">'+fmt(q.total)+' FC</b></button>'}).join('')
       +'<div class="hint" style="margin-top:8px">Le montant de droite suit la période choisie ci-dessous. Touchez un vendeur pour voir ses ventes.</div></div>'}
   if(owner)h+=waterReport();
   h+='<h2 class="h">Tickets</h2><div class="card">'+(list.length?list.slice(0,60).map(function(s){var p=pdvById(s.pdvId);
@@ -1207,12 +1207,37 @@ function waterReport(){
    +(any?'<div class="item"><div class="grow muted">Eau des tasses puisée</div><b class="num">'+k(dr)+'</b></div><div class="item"><div class="grow muted">Après ébullition</div><b class="num">'+k(net)+'</b></div><div class="item"><div class="grow muted">Perdue à l’ébullition</div><b class="num">'+k(dr-net)+(dr>0?' ('+qn((dr-net)/dr*100,1)+' %)':'')+'</b></div>':'')
    +(cl?'<div class="item"><div class="grow muted">Eau de nettoyage ('+ns+' service'+(ns>1?'s':'')+' × '+qn(cw,1)+' kg)</div><b class="num">'+k(cl)+'</b></div>':'')
    +'<div class="item" style="border-top:2px solid var(--line,#ddd)"><div class="grow"><b>Total puisé</b></div><b class="num">'+k(dr+cl)+'</b></div></div>'}
+function payInfo(uid,per){
+  var t0=periodStart(per),ca=0,mq=0,ns=0,all=0,rp=0;
+  live(S.sales).forEach(function(x){if(x.sellerId===uid&&x.ts>=t0)ca+=x.total});
+  S.shifts.forEach(function(h){if(h.uid!==uid||h.state!=='closed'||h.diff==null||!(h.diff<0))return;all+=-h.diff;if(h.closeTs>=t0){mq+=-h.diff;ns++}});
+  (S.repays||[]).forEach(function(r){if(r.uid===uid)rp+=r.amount});
+  var base=Math.max(0,ca-mq),rate=(S.rates||{})[uid]||0;
+  return {ca:ca,mq:mq,ns:ns,base:base,rate:rate,rem:r2(base*rate/100),debt:r2(all-rp),rp:rp}
+}
+function remunHTML(uid){
+  var q=payInfo(uid,U.rper),rows=S.shifts.filter(function(h){return h.uid===uid&&h.state==='closed'&&h.diff<0&&h.closeTs>=periodStart(U.rper)}).sort(function(a,b){return b.closeTs-a.closeTs}).slice(0,8);
+  var rps=(S.repays||[]).filter(function(r){return r.uid===uid}).sort(function(a,b){return b.ts-a.ts}).slice(0,5);
+  var row=function(l,v,c){return '<div class="item"><div class="grow muted">'+l+'</div><b class="num '+(c||'')+'">'+v+'</b></div>'};
+  return '<div class="sub-h" style="margin-top:14px">Rémunération · '+PERLAB[U.rper]+'</div><div class="card">'
+   +row('Chiffre d’affaires (points inclus)',fmt(q.ca)+' FC')
+   +row('Manques de caisse ('+q.ns+' service'+(q.ns>1?'s':'')+')',q.mq?'− '+fmt(q.mq)+' FC':'0 FC',q.mq?'bad':'')
+   +row('<b>Base de rémunération</b>','<b>'+fmt(q.base)+' FC</b>')
+   +row('Pourcentage',q.rate?q.rate+' %':'non défini')
+   +(q.rate?row('<b>Rémunération</b>','<b>'+fmt(q.rem)+' FC</b>'):'')
+   +(rows.length?'<div class="hint" style="padding:8px 0 2px">Manques de la période : '+rows.map(function(h){return dstr(h.closeTs)+' −'+fmt(-h.diff)}).join(' · ')+'</div>':'')
+   +'</div><div class="row" style="margin-top:8px"><button class="btn grow" data-a="rateOpen" data-id="'+uid+'">Pourcentage</button></div>'
+   +'<div class="sub-h" style="margin-top:14px">Dette de caisse</div><div class="card">'
+   +row('Manques cumulés − remboursements','<span class="'+(q.debt>0?'bad':'good')+'">'+fmt(q.debt)+' FC</span>')
+   +rps.map(function(r){return '<div class="item"><div class="grow small muted">'+dstr(r.ts)+(r.note?' · '+esc(r.note):'')+'</div><span class="num">− '+fmt(r.amount)+' FC</span><button class="btn sm danger" data-a="repayDel" data-id="'+r.id+'" data-uid="'+uid+'">×</button></div>'}).join('')
+   +'</div><div class="row" style="margin-top:8px"><button class="btn primary grow" data-a="repayOpen" data-id="'+uid+'">Enregistrer un remboursement</button></div>'
+}
 function sellerList(){
   var m={};S.users.forEach(function(u){if(u.role==='seller')m[u.id]={id:u.id,name:u.name,pdvId:u.pdvId}});
   S.sales.forEach(function(x){if(x.sellerId&&x.sellerId!=='u0'&&!m[x.sellerId])m[x.sellerId]={id:x.sellerId,name:x.sellerName||'?',pdvId:x.pdvId,gone:true}});
   return Object.keys(m).map(function(k){return m[k]});
 }
-function profitDetail(list,title,ca){
+function profitDetail(list,title,ca,uid){
   var a=agg(list),owner=U.user.role==='owner';
   var rows=list.map(function(x){var pd=pdvById(x.pdvId),pr=profitOf(x);
     return '<button class="rowbtn" data-a="openSale" data-id="'+x.id+'" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">N° '+pad(x.no)+' · '+tstr(x.ts)+(pd?' · '+esc(pd.name):'')+'</div>'
@@ -1223,7 +1248,7 @@ function profitDetail(list,title,ca){
     +(ca?'<div class="kpi"><div class="k">Payé en points</div><div class="v pts">'+fmt(a.disc)+' FC</div><div class="s">le reste : '+fmt(a.total-a.disc)+' FC en espèces</div></div></div><div class="hint">Chaque ligne est une vente. Touchez-la pour voir son ticket.</div>'
     :'<div class="kpi"><div class="k">Bénéfice</div><div class="v '+(a.profit<0?'bad':'good')+'">'+fmt(a.profit)+' FC</div><div class="s">ventes − achats '+fmt(a.cogs)+'</div></div></div>'
     +'<div class="hint">Chaque ligne : prix de vente − prix d’achat = bénéfice (les points utilisés comptent comme de l’argent encaissé). Touchez une vente pour voir son ticket.</div>')
-    +'<div style="margin-top:6px;max-height:50vh;overflow:auto">'+(rows||'<div class="hint" style="margin-top:10px">Aucune vente sur cette période.</div>')+'</div>'
+    +(uid?remunHTML(uid):'')+'<div style="margin-top:6px;max-height:50vh;overflow:auto">'+(rows||'<div class="hint" style="margin-top:10px">Aucune vente sur cette période.</div>')+'</div>'
     +'<button class="btn primary wide" style="margin-top:12px" data-a="closeModal">Fermer</button>');
 }
 function showTicket(s,fresh){
@@ -1475,7 +1500,7 @@ function startSession(u,silent){
 }
 function logoutNow(){if(U.user)logEv('logout','Déconnexion');U.user=null;S.session=null;resetSale();save();render();if(SYNC_ON)Sync.logout()}
 var STOCK_ACT={wSave:1,ingPackSave:1,scConfirm:1,delIngDo:1,saveMulti:1,addStock:1,saveStock:1,saveProd:1,delProd:1,saveIng:1,saveCount:1,countIng:1};
-var OWNER_ONLY={saveClean:1,wOpen:1,wSave:1,ingPackOpen:1,ingPackSave:1,scOpen:1,scReview:1,scBack:1,scConfirm:1,cntFlag:1,ctAdd:1,ctDel:1,smFill:1,delIngAsk:1,delIngDo:1,stockMulti:1,saveMulti:1,stockItem:1,stockGo:1,slowToggle:1,lockAsk:1,lockDo:1,unlockSeller:1,shiftDetail:1,editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
+var OWNER_ONLY={rateOpen:1,rateSave:1,repayOpen:1,repaySave:1,repayDel:1,saveClean:1,wOpen:1,wSave:1,ingPackOpen:1,ingPackSave:1,scOpen:1,scReview:1,scBack:1,scConfirm:1,cntFlag:1,ctAdd:1,ctDel:1,smFill:1,delIngAsk:1,delIngDo:1,stockMulti:1,saveMulti:1,stockItem:1,stockGo:1,slowToggle:1,lockAsk:1,lockDo:1,unlockSeller:1,shiftDetail:1,editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
 
 /* rendu général */
 function tabView(){
@@ -1644,7 +1669,7 @@ var A={
     if(SYNC_ON)Sync.settle(stockKeys(s0.items||[],s0.pdvId));
     s0.cancelled={ts:Date.now(),by:U.user.id,byName:whoName(U.user),reason:why};
     logEv('cancel','Ticket N° '+pad(s0.no)+' annulé ('+fmt(s0.total)+' FC) : '+why);save();render();showTicket(s0,false);toast('Vente annulée.')},
-  sdetail:function(d){var sl=sellerList().find(function(x){return x.id===d.id});profitDetail(inPeriod(live(S.sales),U.rper).filter(function(x){return x.sellerId===d.id}),(sl?sl.name:'Vendeur')+' — '+PERLAB[U.rper],true)},
+  sdetail:function(d){var sl=sellerList().find(function(x){return x.id===d.id});profitDetail(inPeriod(live(S.sales),U.rper).filter(function(x){return x.sellerId===d.id}),(sl?sl.name:'Vendeur')+' — '+PERLAB[U.rper],true,d.id)},
   pvdetail:function(d){var pd=pdvById(d.id);profitDetail(inPeriod(live(S.sales),U.rper).filter(function(x){return x.pdvId===d.id}),'PDV '+(pd?pd.name:'?')+' — '+PERLAB[U.rper],true)},
   tab:function(d){U.tab=d.v;render();window.scrollTo(0,0)},
   closeModal:closeModal,
@@ -1817,6 +1842,11 @@ var A={
     render();
   },
   saveClean:function(){var e=$('#cwk'),v=e&&e.value.trim()?parseDec(e.value):0;if(isNaN(v)||v<0||v>1000){toast('Saisissez un nombre de kg valide.','bad');return}S.cleanW=v;save();toast(v?'Eau de nettoyage : '+v+' kg par service.':'Eau de nettoyage retirée.');render()},
+  rateOpen:function(d){var v=(S.rates||{})[d.id];openModal('<h3>Pourcentage de rémunération</h3><div class="hint">Appliqué à la base de rémunération : chiffre d’affaires du vendeur (ventes payées en points incluses) moins ses manques de caisse. Les excédents ne sont pas comptés.</div><label class="lbl" for="rtv">Pourcentage (%)</label><input id="rtv" class="inp" inputmode="decimal" placeholder="Ex. 10" data-i="dn" value="'+(v?String(v).replace('.',','):'')+'"><div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="rateSave" data-id="'+d.id+'">Enregistrer</button></div>')},
+  rateSave:function(d){var e=$('#rtv'),v=e&&e.value.trim()?parseDec(e.value):0;if(isNaN(v)||v<0||v>100){toast('Saisissez un pourcentage entre 0 et 100.','bad');return}S.rates=S.rates||{};if(v>0)S.rates[d.id]=v;else delete S.rates[d.id];save();toast('Pourcentage enregistré.');A.sdetail({id:d.id})},
+  repayOpen:function(d){openModal('<h3>Enregistrer un remboursement</h3><div class="hint">Montant remis par le vendeur pour couvrir ses manques de caisse.</div><label class="lbl" for="rpa">Montant (FC)</label><input id="rpa" class="inp" inputmode="decimal" placeholder="0" data-i="dn"><label class="lbl" for="rpn">Note (facultatif)</label><input id="rpn" class="inp" maxlength="60"><div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="repaySave" data-id="'+d.id+'">Enregistrer</button></div>')},
+  repaySave:function(d){var v=parseDec(($('#rpa')||{}).value);if(isNaN(v)||!(v>0)){toast('Saisissez un montant supérieur à 0.','bad');return}S.repays=S.repays||[];S.repays.push({id:'rp'+nid(),uid:d.id,ts:Date.now(),amount:r2(v),note:(($('#rpn')||{}).value||'').trim()});logEv('repay','Remboursement de caisse : '+fmt(v)+' FC');save();toast('Remboursement enregistré.');A.sdetail({id:d.id})},
+  repayDel:function(d){S.repays=(S.repays||[]).filter(function(r){return r.id!==d.id});save();A.sdetail({id:d.uid})},
   saveMargin:function(){var v=num('mg');if(isNaN(v)||v>50){toast('Saisissez un pourcentage entre 0 et 50.');return}S.margin=v;save();toast('Marge enregistrée : '+v+' %.');render()},
   /* rapports */
   rper:function(d){U.rper=d.v;render()},
@@ -1941,7 +1971,7 @@ var Sync=(function(){
     if(Array.isArray(v))return '['+v.map(stab).join(',')+']';
     return '{'+Object.keys(v).filter(function(k){return v[k]!==undefined}).sort().map(function(k){return JSON.stringify(k)+':'+stab(v[k])}).join(',')+'}'}
   /* qui a le droit d'écrire quoi (o = propriétaire, s = vendeur ; u = création/modification, i = ajout seulement) */
-  var SPEC={products:{o:'u',s:''},ingredients:{o:'u',s:''},pdvs:{o:'u',s:''},config:{o:'u',s:''},customers:{o:'u',s:'u'},
+  var SPEC={products:{o:'u',s:''},ingredients:{o:'u',s:''},pdvs:{o:'u',s:''},config:{o:'u',s:''},pay:{o:'u',s:''},customers:{o:'u',s:'u'},
     ledger:{o:'u',s:'i'},sales:{o:'u',s:'i'},shifts:{o:'u',s:'u'},withdrawals:{o:'u',s:''},floats:{o:'u',s:''},resets:{o:'u',s:'u'},
     log:{o:'i',s:'i'},positions:{o:'i',s:'i'},counts:{o:'i',s:''},moves:{o:'i',s:''},merges:{o:'i',s:'i'},stock:{o:'u',s:''},istock:{o:'u',s:''}};
   var TOMB={products:1,ingredients:1,pdvs:1,customers:1,stock:1,istock:1};
@@ -1967,6 +1997,7 @@ var Sync=(function(){
     S.counts.forEach(function(x){add('counts',x.id,x.pdvId,x)});
     ['log','positions','moves','merges'].forEach(function(c){(S[c]||[]).forEach(function(x){add(c,'x'+cyrb53(stab(x)),x.pdvId||x.pdv,x)})});
     add('config','main',null,{margin:S.margin,geoEnabled:S.geoEnabled,brand:S.brand||null,counters:S.counters||[],minVer:S.minVer||0,cleanW:S.cleanW||0});
+    add('pay','main',null,{rates:S.rates||{},repays:S.repays||[]});
     return R;
   }
   function find(arr,id){for(var i=0;i<arr.length;i++)if(arr[i].id===id)return i;return -1}
@@ -1979,6 +2010,7 @@ var Sync=(function(){
       ob.stock=ob.stock||{};if(del)delete ob.stock[pt[2]];else{ob.stock[pt[2]]=c==='stock'?d.cur:d;if(c==='stock'&&d.ref>0){ob.ref=ob.ref||{};ob.ref[pt[2]]=d.ref}}return}
     if(c==='floats'){if(del)delete S.floats[id];else S.floats[id]=d;return}
     if(c==='config'){if(d.margin!=null)S.margin=d.margin;if(d.geoEnabled!=null)S.geoEnabled=d.geoEnabled;if(d.brand)S.brand=d.brand;if(d.counters)S.counters=d.counters;if(d.minVer)S.minVer=d.minVer;if(d.cleanW!=null)S.cleanW=d.cleanW;return}
+    if(c==='pay'){if(!del){S.rates=d.rates||{};S.repays=d.repays||[]}return}
     if(ARR[c]){arr=S[ARR[c]];i=find(arr,id);if(del){if(i>=0)arr.splice(i,1)}else if(i>=0)arr[i]=d;else arr.push(d);return}
     if(ARR0[c]&&!del)S[ARR0[c]].push(d);
   }
@@ -2116,7 +2148,7 @@ var Sync=(function(){
     rows.sort(function(a,b){return (PRIO[a.coll]!=null?PRIO[a.coll]:2)-(PRIO[b.coll]!=null?PRIO[b.coll]:2)});
     var groups=[];
     rows.forEach(function(r){var pr=PRIO[r.coll]!=null?PRIO[r.coll]:2,g=groups[groups.length-1];
-      if(g&&g.mode===r.mode&&g.pr===pr&&g.rows.length<100&&r.coll!=='config'&&g.rows[0].coll!=='config')g.rows.push(r);else groups.push({mode:r.mode,pr:pr,rows:[r]})});
+      if(g&&g.mode===r.mode&&g.pr===pr&&g.rows.length<100&&r.coll!=='config'&&r.coll!=='pay'&&g.rows[0].coll!=='config'&&g.rows[0].coll!=='pay')g.rows.push(r);else groups.push({mode:r.mode,pr:pr,rows:[r]})});
     var p=Promise.resolve();
     groups.forEach(function(g){p=p.then(function(){return sendGroup(g.mode,g.rows)})});
     return p.then(function(){api.stockDirty=false;writeSt()});
