@@ -229,7 +229,7 @@ svg.map{background:var(--surface-2);border-radius:8px;border:1px solid var(--lin
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v48',APP_BUILD=39;
+var APP_VER='v49',APP_BUILD=39;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -426,8 +426,8 @@ function wPrev(g,raw){var w=wOf(g);if(!w||!String(raw||'').trim())return '';var 
 var isU=function(g){return ['g','ml','kg'].indexOf(unit(g))<0};
 function eCalc(g,theo,actual){var dev=r6(actual-theo);
   if(isU(g)){var diff=r6(-dev);return {strict:true,diff:diff,pct:diff,ok:Math.abs(diff)<1e-4}}
-  var pct=theo>0?dev/theo*100:(dev===0?0:100);return {strict:false,diff:r6(-dev),pct:pct,ok:Math.abs(pct)<=mgOf(g)}}
-function eTxt(o){if(o.strict)return o.ok?'Juste':(o.diff<0?'Manque ':'Excédent +')+dec(Math.abs(o.diff))+' unité'+(Math.abs(o.diff)>1?'s':'');return (o.pct>0?'+':'')+dec(o.pct)+' %'}
+  var pct=theo>0?dev/theo*100:(dev===0?0:100);return {strict:false,g:g,diff:r6(-dev),pct:pct,ok:Math.abs(pct)<=mgOf(g)}}
+function eTxt(o){if(o.strict)return o.ok?'Juste':(o.diff<0?'Manque ':'Excédent +')+dec(Math.abs(o.diff))+' unité'+(Math.abs(o.diff)>1?'s':'');var g=o.g||ingById(o.ing||o.ingId),q=(g&&o.diff)?' · '+(o.diff<0?'manque ':'excédent ')+qf(g,Math.abs(o.diff)):'';return (o.pct>0?'+':'')+dec(o.pct)+' %'+q}
 function drawInfo(g,pdv){var d=(g.draws||[]).filter(function(x){return x.pdv===pdv});if(!d.length)return '';var l=d[0],ev=l.dr-l.net,k=d.slice(0,7),av=0;k.forEach(function(x){av+=(x.dr-x.net)/x.dr*100});av/=k.length;
   return '<div class="small muted" style="margin-top:4px">Dernier service : puisé '+qf(g,l.dr)+' · après ébullition '+qf(g,l.net)+' · perdu '+qf(g,ev)+' ('+qn(ev/l.dr*100,1)+' %). Moyenne '+k.length+' derniers : '+qn(av,1)+' %.</div>'}
 var numD=function(id){var el=$('#'+id);return el?parseDec(el.value):NaN};

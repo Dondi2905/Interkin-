@@ -1,6 +1,6 @@
 /* Interkin POS : mode sans réseau.
    Pour publier une mise à jour, changez simplement le numéro de VERSION. */
-var VERSION = 'interkin-v48';
+var VERSION = 'interkin-v49';
 var SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', function (e) {
