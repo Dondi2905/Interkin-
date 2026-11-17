@@ -229,7 +229,7 @@ svg.map{background:var(--surface-2);border-radius:8px;border:1px solid var(--lin
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v55',APP_BUILD=39;
+var APP_VER='v56',APP_BUILD=39;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -1206,7 +1206,12 @@ function waterReport(){
   return '<h2 class="h">Eau puisée · '+PERLAB[U.rper]+'</h2><div class="card">'
    +(any?'<div class="item"><div class="grow muted">Eau des tasses puisée</div><b class="num">'+k(dr)+'</b></div><div class="item"><div class="grow muted">Après ébullition</div><b class="num">'+k(net)+'</b></div><div class="item"><div class="grow muted">Perdue à l’ébullition</div><b class="num">'+k(dr-net)+(dr>0?' ('+qn((dr-net)/dr*100,1)+' %)':'')+'</b></div>':'')
    +(cl?'<div class="item"><div class="grow muted">Eau de nettoyage ('+ns+' service'+(ns>1?'s':'')+' × '+qn(cw,1)+' kg)</div><b class="num">'+k(cl)+'</b></div>':'')
-   +'<div class="item" style="border-top:2px solid var(--line,#ddd)"><div class="grow"><b>Total puisé</b></div><b class="num">'+k(dr+cl)+'</b></div></div>'+waterByShift(t0,cw)}
+   +'<div class="item" style="border-top:2px solid var(--line,#ddd)"><div class="grow"><b>Total puisé</b></div><b class="num">'+k(dr+cl)+'</b></div></div>'+waterByShift(t0,cw)+drawList(t0)}
+function drawList(t0){
+  var L=[];S.ingredients.forEach(function(g){(g.draws||[]).forEach(function(x){if(x.ts>=t0)L.push({g:g,x:x})})});
+  if(!L.length)return '';L.sort(function(a,b){return b.x.ts-a.x.ts});
+  return '<div class="sub-h" style="margin-top:14px">Pesées d’eau enregistrées</div><div class="card">'+L.slice(0,12).map(function(o){var x=o.x,pd=pdvById(x.pdv),k=function(v){return qn(v,1)};
+    return '<div class="item"><div class="grow"><b>'+dstr(x.ts)+' '+new Date(x.ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})+' · '+esc(pd?pd.name:'?')+'</b><div class="small num muted">Puisé '+k(x.dr)+' · après ébullition '+k(x.net)+' '+unit(o.g)+'</div></div><button class="btn sm danger" data-a="drawAsk" data-id="'+o.g.id+'" data-ts="'+x.ts+'" data-pdv="'+x.pdv+'">Retirer</button></div>'}).join('')+'</div><div class="hint">« Retirer » enlève la pesée du suivi de l’eau puisée. Le stock n’est pas modifié.</div>'}
 function waterByShift(t0,cw){
   var sh=S.shifts.filter(function(h){return h.openTs>=t0}).sort(function(a,b){return b.openTs-a.openTs}),by={},free=[];
   S.ingredients.forEach(function(g){var f=unit(g)==='kg'?1:(unit(g)==='g'||unit(g)==='ml')?0.001:0;if(!f)return;(g.draws||[]).forEach(function(x){if(x.ts<t0-4*3600000)return;
@@ -1516,7 +1521,7 @@ function startSession(u,silent){
 }
 function logoutNow(){if(U.user)logEv('logout','Déconnexion');U.user=null;S.session=null;resetSale();save();render();if(SYNC_ON)Sync.logout()}
 var STOCK_ACT={wSave:1,ingPackSave:1,scConfirm:1,delIngDo:1,saveMulti:1,addStock:1,saveStock:1,saveProd:1,delProd:1,saveIng:1,saveCount:1,countIng:1};
-var OWNER_ONLY={rateAllOpen:1,rateAllSave:1,rateOpen:1,rateSave:1,repayOpen:1,repaySave:1,repayDel:1,saveClean:1,wOpen:1,wSave:1,ingPackOpen:1,ingPackSave:1,scOpen:1,scReview:1,scBack:1,scConfirm:1,cntFlag:1,ctAdd:1,ctDel:1,smFill:1,delIngAsk:1,delIngDo:1,stockMulti:1,saveMulti:1,stockItem:1,stockGo:1,slowToggle:1,lockAsk:1,lockDo:1,unlockSeller:1,shiftDetail:1,editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
+var OWNER_ONLY={drawAsk:1,drawDo:1,rateAllOpen:1,rateAllSave:1,rateOpen:1,rateSave:1,repayOpen:1,repaySave:1,repayDel:1,saveClean:1,wOpen:1,wSave:1,ingPackOpen:1,ingPackSave:1,scOpen:1,scReview:1,scBack:1,scConfirm:1,cntFlag:1,ctAdd:1,ctDel:1,smFill:1,delIngAsk:1,delIngDo:1,stockMulti:1,saveMulti:1,stockItem:1,stockGo:1,slowToggle:1,lockAsk:1,lockDo:1,unlockSeller:1,shiftDetail:1,editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
 
 /* rendu général */
 function tabView(){
@@ -1868,6 +1873,8 @@ var A={
   rateAllSave:function(d){var e=$('#rta'),v=e&&e.value.trim()?parseDec(e.value):0;if(isNaN(v)||v<0||v>100){toast('Saisissez un pourcentage entre 0 et 100.','bad');return}S.rateAll=v;if(d.mode==='all')S.rates={};save();closeModal();render();toast(v?'Pourcentage commun : '+v+' %.':'Pourcentage commun retiré.')},
   repayOpen:function(d){openModal('<h3>Enregistrer un remboursement</h3><div class="hint">Montant remis par le vendeur pour couvrir ses manques de caisse.</div><label class="lbl" for="rpa">Montant (FC)</label><input id="rpa" class="inp" inputmode="decimal" placeholder="0" data-i="dn"><label class="lbl" for="rpn">Note (facultatif)</label><input id="rpn" class="inp" maxlength="60"><div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="repaySave" data-id="'+d.id+'">Enregistrer</button></div>')},
   repaySave:function(d){var v=parseDec(($('#rpa')||{}).value);if(isNaN(v)||!(v>0)){toast('Saisissez un montant supérieur à 0.','bad');return}S.repays=S.repays||[];S.repays.push({id:'rp'+nid(),uid:d.id,ts:Date.now(),amount:r2(v),note:(($('#rpn')||{}).value||'').trim()});logEv('repay','Remboursement de caisse : '+fmt(v)+' FC');save();toast('Remboursement enregistré.');A.sdetail({id:d.id})},
+  drawAsk:function(d){var g=ingById(d.id);if(!g)return;openModal('<h3>Retirer cette pesée ?</h3><p class="muted">Elle disparaît du suivi de l’eau puisée (rapports et carte de l’eau). Le stock de « '+esc(g.name)+' » ne change pas.</p><div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn danger grow" data-a="drawDo" data-id="'+g.id+'" data-ts="'+d.ts+'" data-pdv="'+d.pdv+'">Retirer</button></div>')},
+  drawDo:function(d){var g=ingById(d.id);if(!g)return;var n=(g.draws||[]).length;g.draws=(g.draws||[]).filter(function(x){return !(String(x.ts)===String(d.ts)&&x.pdv===d.pdv)});if(g.draws.length===n){toast('Pesée introuvable.','bad');return}logEv('draw','Pesée d’eau retirée du suivi ('+g.name+')');save();closeModal();render();toast('Pesée retirée.')},
   repayDel:function(d){S.repays=(S.repays||[]).filter(function(r){return r.id!==d.id});save();A.sdetail({id:d.uid})},
   saveMargin:function(){var v=num('mg');if(isNaN(v)||v>50){toast('Saisissez un pourcentage entre 0 et 50.');return}S.margin=v;save();toast('Marge enregistrée : '+v+' %.');render()},
   /* rapports */
