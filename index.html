@@ -229,7 +229,7 @@ svg.map{background:var(--surface-2);border-radius:8px;border:1px solid var(--lin
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v53',APP_BUILD=39;
+var APP_VER='v54',APP_BUILD=39;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -414,15 +414,15 @@ var qf=function(g,n){return qn(n,unit(g)==='kg'?3:2)+' '+unit(g)};
 var unitName=function(u){return u==='g'?'grammes':u==='ml'?'millilitres':u==='kg'?'kilogrammes':u};
 var wOf=function(g){return g&&g.w?g.w:null};
 var mgOf=function(g){var w=wOf(g);return w&&w.mg!=null?w.mg:S.margin};
-function wQty(g,raw){raw=String(raw==null?'':raw).trim();var w=wOf(g);
+function wQty(g,raw,drawn){raw=String(raw==null?'':raw).trim();var w=wOf(g);
   if(w&&w.pc>0&&/n$/i.test(raw)){var c=parseDec(raw.slice(0,-1));return isNaN(c)?NaN:Math.round(c)}
   var v=parseDec(raw);if(isNaN(v))return NaN;if(!w)return v;
-  if(w.pc>0)return Math.round(v/w.pc);if(w.tare>0)return r6(v-w.tare);return v}
+  if(w.pc>0)return Math.round(v/w.pc);var t=drawn&&w.dt>0?w.dt:w.tare;if(t>0)return r6(v-t);return v}
 function wHint(g){var w=wOf(g);if(!w)return '';
   if(w.pc>0)return '<div class="hint" style="margin-top:6px">Saisissez le poids lu sur la balance, en grammes : l’application le convertit en nombre ('+qn(w.pc,2)+' g par pièce). Pour moins de 10 pièces, comptez-les et tapez par exemple 7n.</div>';
   if(w.tare>0)return '<div class="hint" style="margin-top:6px">Saisissez le poids lu sur la balance, récipient compris (en '+unit(g)+'). L’application retire le récipient : '+qn(w.tare,3)+' '+unit(g)+'.</div>';
   return ''}
-function wPrev(g,raw){var w=wOf(g);if(!w||!String(raw||'').trim())return '';var q=wQty(g,raw);if(isNaN(q))return '';return 'Net : '+qf(g,q)+(w.pc>0?' ('+qn(q,0)+' pièces)':'')}
+function wPrev(g,raw,drawn){var w=wOf(g);if(!w||!String(raw||'').trim())return '';var q=wQty(g,raw,drawn);if(isNaN(q))return '';return 'Net : '+qf(g,q)+(w.pc>0?' ('+qn(q,0)+' pièces)':'')}
 var isU=function(g){return ['g','ml','kg'].indexOf(unit(g))<0};
 function eCalc(g,theo,actual){var dev=r6(actual-theo);
   if(isU(g)){var diff=r6(-dev);return {strict:true,diff:diff,pct:diff,ok:Math.abs(diff)<1e-4}}
@@ -1071,7 +1071,7 @@ function stockView(){
      var s=ist(g,pdv),lc=lastCount(g.id,pdv);
      var lcChip=lc?'<span class="chip '+(lc.ok?'good':'bad')+'">'+(lc.strict?(lc.ok?'Compté juste':'Écart '+eTxt(lc)):'Écart '+eTxt(lc)+(lc.ok?' · dans la marge':' · hors marge'))+'</span>':'';
      return '<div class="item" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(g.name)+'</div>'
-       +(s?'<div class="num" style="font:600 18px var(--font-head)">'+qf(g,s.cur)+'</div><div class="small muted">Consommé depuis le dernier comptage : '+qf(g,s.used)+'</div><div style="margin-top:6px">'+lcChip+'</div>'+drawInfo(g,pdv)+(wOf(g)?'<div class="small muted">Pesée'+(wOf(g).pc>0?' · '+qn(wOf(g).pc,2)+' g/pièce':'')+(wOf(g).tare>0?' · récipient '+qn(wOf(g).tare,3)+' '+unit(g):'')+(wOf(g).mg!=null?' · marge '+wOf(g).mg+' %':'')+(wOf(g).fx?' · '+qf(g,wOf(g).fx)+'/service':'')+'</div>':''):'<div class="small muted">Non suivi dans ce point de vente</div>')+(owner?packChips(g):'')+'</div>'
+       +(s?'<div class="num" style="font:600 18px var(--font-head)">'+qf(g,s.cur)+'</div><div class="small muted">Consommé depuis le dernier comptage : '+qf(g,s.used)+'</div><div style="margin-top:6px">'+lcChip+'</div>'+drawInfo(g,pdv)+(wOf(g)?'<div class="small muted">Pesée'+(wOf(g).pc>0?' · '+qn(wOf(g).pc,2)+' g/pièce':'')+(wOf(g).tare>0?' · récipient '+qn(wOf(g).tare,3)+' '+unit(g):'')+(wOf(g).dt>0?' · seau '+qn(wOf(g).dt,3)+' '+unit(g):'')+(wOf(g).mg!=null?' · marge '+wOf(g).mg+' %':'')+(wOf(g).fx?' · '+qf(g,wOf(g).fx)+'/service':'')+'</div>':''):'<div class="small muted">Non suivi dans ce point de vente</div>')+(owner?packChips(g):'')+'</div>'
        +(owner?'<div class="stack" style="gap:6px"><button class="btn sm" data-a="addStock" data-kind="i" data-id="'+g.id+'">+ Ajouter</button>'+(s?'<button class="btn sm" data-a="countIng" data-id="'+g.id+'">Compter</button><button class="btn sm" style="font-size:12px;padding:4px 10px" data-a="cntFlag" data-id="'+g.id+'">'+(g.cnt?'✓ Compté à la clôture':'Compter à la clôture')+'</button>':'')+'<button class="btn sm" style="font-size:12px;padding:4px 10px" data-a="ingPackOpen" data-id="'+g.id+'">'+(g.pack&&g.pack.length?'Emballage ✓':'Emballage')+'</button><button class="btn sm" style="font-size:12px;padding:4px 10px" data-a="wOpen" data-id="'+g.id+'">'+(wOf(g)?'Pesée ✓':'Pesée')+'</button><button class="btn sm danger" data-a="delIngAsk" data-id="'+g.id+'">Supprimer</button></div>':'')+'</div>'}).join('')+'</div>';
   var mv=S.moves.filter(function(m){return m.pdv===pdv}).slice(0,5);
   if(mv.length)h+='<h2 class="h">Derniers ajouts</h2><div class="card">'+mv.map(function(m){var o=m.kind==='p'?prodById(m.id):ingById(m.id);return '<div class="item"><div class="grow small">'+esc(o?o.name:'?')+'<div class="muted">'+dstr(m.ts)+' '+tstr(m.ts)+'</div></div><b class="good num">+'+qn(m.qty,2)+(m.kind==='i'?' '+unit(o):'')+'</b></div>'}).join('')+'</div>';
@@ -1095,7 +1095,7 @@ function stockMultiHTML(kind,id){
 function stockAddHTML(kind,id){
   var o=kind==='p'?prodById(id):ingById(id);
   return '<h3>Ajouter du stock</h3><div class="muted" style="margin:-6px 0 6px">'+esc(o.name)+'</div>'+pdvSelect('sap',stockPdv())
-   +(kind==='i'&&wOf(o)&&wOf(o).dr?'<label class="lbl" for="sad">Eau puisée, à payer (poids lu sur la balance, récipient compris)</label><input id="sad" class="inp" inputmode="decimal" placeholder="0" data-i="wp" data-w="'+o.id+'"><div class="small muted" id="sadp"></div>':'')
+   +(kind==='i'&&wOf(o)&&wOf(o).dr?'<label class="lbl" for="sad">Eau puisée, à payer (poids lu sur la balance, récipient compris)</label><input id="sad" class="inp" inputmode="decimal" placeholder="0" data-i="wp" data-w="'+o.id+'"><div class="small muted" id="sadp"></div>'+(wOf(o).dt>0?'<div class="hint">Seau retiré : '+qn(wOf(o).dt,3)+' '+unit(o)+'.</div>':''):'')
    +'<label class="lbl" for="saq">'+(kind==='i'&&wOf(o)&&wOf(o).dr?'Après ébullition, prêt à servir (poids lu, récipient compris) ':'Quantité à ajouter ')+'('+(kind==='p'?'unités':(wOf(o)&&wOf(o).pc>0?'grammes lus':unitName(unit(o))))+')</label><input id="saq" class="inp" inputmode="decimal" placeholder="0" data-i="wp" data-w="'+o.id+'"><div class="small muted" id="saqp"></div>'+(kind==='i'?wHint(o):'')
    +(S.pdvs.length>1?'<button class="btn wide" style="margin-top:12px" data-a="stockMulti" data-kind="'+kind+'" data-id="'+id+'">Saisir plusieurs points de vente à la fois</button>':'')+'<div class="row" style="margin-top:18px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="saveStock" data-kind="'+kind+'" data-id="'+id+'">Ajouter</button></div>';
 }
@@ -1781,7 +1781,7 @@ var A={
   addStock:function(d){openModal(stockAddHTML(d.kind,d.id))},
   saveStock:function(d){
     var q=numD('saq'),pdv=$('#sap').value,og=d.kind==='i'?ingById(d.id):null,dr=NaN;
-    if(og&&wOf(og)){q=wQty(og,$('#saq').value);if($('#sad')){dr=wQty(og,$('#sad').value);if($('#sad').value.trim()&&!(dr>=q)){toast('L’eau puisée doit être supérieure ou égale à l’eau après ébullition.','bad');return}}}
+    if(og&&wOf(og)){q=wQty(og,$('#saq').value);if($('#sad')){dr=wQty(og,$('#sad').value,true);if($('#sad').value.trim()&&!(dr>=q)){toast('L’eau puisée doit être supérieure ou égale à l’eau après ébullition.','bad');return}}}
     if(d.kind==='p')q=Math.round(q);
     if(!(q>0)){toast('Saisissez une quantité supérieure à 0.');return}
     if(d.kind==='p'){var p=prodById(d.id);p.stock=p.stock||{};p.stock[pdv]=(p.stock[pdv]||0)+q;p.ref=p.ref||{};p.ref[pdv]=p.stock[pdv]}
@@ -1796,16 +1796,17 @@ var A={
   wOpen:function(d){var g=ingById(d.id);if(!g)return;var w=wOf(g)||{},u=unit(g),pc=['g','ml','kg'].indexOf(u)<0,f=function(x){return x==null||x===0?'':String(x).replace('.',',')};
     openModal('<h3>Pesée de « '+esc(g.name)+' »</h3><div class="hint">Pour saisir le poids lu sur la balance au lieu de la quantité.</div>'
      +(pc?'<label class="lbl" for="wpc">Poids d’une pièce, en grammes</label><input id="wpc" class="inp" inputmode="decimal" placeholder="Ex. 0,90" value="'+f(w.pc)+'"><div class="hint">Pesez un lot (100 pièces) et divisez : 90 g pour 100 = 0,90 g.</div>'
-      :'<label class="lbl" for="wtr">Poids du récipient vide, en '+u+'</label><input id="wtr" class="inp" inputmode="decimal" placeholder="0" value="'+f(w.tare)+'"><div class="hint">Retiré automatiquement du poids lu.</div>')
+      :'<label class="lbl" for="wtr">Poids du récipient vide (Thermos, comptage), en '+u+'</label><input id="wtr" class="inp" inputmode="decimal" placeholder="0" value="'+f(w.tare)+'"><div class="hint">Retiré automatiquement du poids lu.</div>')
+     +(pc?'':'<label class="lbl" for="wdt">Poids du récipient de l’eau puisée (seau), en '+u+'</label><input id="wdt" class="inp" inputmode="decimal" placeholder="vide = même récipient" value="'+f(w.dt)+'"><div class="hint">À remplir seulement si l’eau puisée est pesée dans un autre récipient que l’eau après ébullition (Thermos).</div>')
      +'<label class="lbl" for="wmg">Marge d’erreur propre à cet intrant (%)</label><input id="wmg" class="inp" inputmode="decimal" placeholder="vide = marge générale ('+S.margin+')" value="'+f(w.mg)+'">'
      +'<label class="lbl" for="wfx">Consommation fixe par service, en '+u+'</label><input id="wfx" class="inp" inputmode="decimal" placeholder="Ex. 10 pour l’eau de nettoyage" value="'+f(w.fx)+'"><div class="hint">Ajoutée à la consommation prévue lors du comptage de clôture.</div>'
      +(pc?'':'<label class="lbl" for="wdr">Noter l’eau puisée à chaque ajout</label><select id="wdr" class="sel"><option value="">Non</option><option value="1"'+(w.dr?' selected':'')+'>Oui (puisé et après ébullition)</option></select>')
      +'<div class="row" style="margin-top:16px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="wSave" data-id="'+g.id+'">Enregistrer</button></div>')},
   wSave:function(d){var g=ingById(d.id);if(!g)return;var n=function(id){var e=$('#'+id);if(!e||!e.value.trim())return null;var v=parseDec(e.value);return isNaN(v)||v<0?NaN:v};
-    var pc=n('wpc'),tr=n('wtr'),mg=n('wmg'),fx=n('wfx'),dr=$('#wdr')?$('#wdr').value==='1':false;
-    if([pc,tr,mg,fx].some(function(x){return x!==x})){toast('Vérifiez les nombres saisis.','bad');return}
+    var pc=n('wpc'),tr=n('wtr'),dt=n('wdt'),mg=n('wmg'),fx=n('wfx'),dr=$('#wdr')?$('#wdr').value==='1':false;
+    if([pc,tr,dt,mg,fx].some(function(x){return x!==x})){toast('Vérifiez les nombres saisis.','bad');return}
     if(mg!=null&&mg>50){toast('Marge entre 0 et 50 %.','bad');return}
-    var w={};if(pc>0)w.pc=pc;if(tr>0)w.tr=tr,w.tare=tr;if(mg!=null)w.mg=mg;if(fx>0)w.fx=fx;if(dr)w.dr=1;
+    var w={};if(pc>0)w.pc=pc;if(tr>0)w.tr=tr,w.tare=tr;if(dt>0)w.dt=dt;if(mg!=null)w.mg=mg;if(fx>0)w.fx=fx;if(dr)w.dr=1;
     delete w.tr;if(Object.keys(w).length)g.w=w;else delete g.w;save();closeModal();render();toast(g.w?'Pesée enregistrée.':'Pesée retirée.')},
   ingPackSave:function(d){var g=ingById(d.id);if(!g||!M.pack)return;
     var pk=M.pack.map(function(x){return {ing:x.ing,up:parseInt(x.up,10)}}).filter(function(x){return x.up>0});
@@ -1920,7 +1921,7 @@ document.addEventListener('click',function(e){
   if(SYNC_ON&&STOCK_ACT[b.dataset.a])Sync.dirtyStock();
 });
 var I={
-  wp:function(t){var g=ingById(t.dataset.w),o=document.getElementById(t.id+'p');if(g&&o)o.textContent=wPrev(g,t.value)},
+  wp:function(t){var g=ingById(t.dataset.w),o=document.getElementById(t.id+'p');if(g&&o)o.textContent=wPrev(g,t.value,t.id==='sad')},
   pq:function(t){U.pq=t.value;$('#prodBox').innerHTML=prodHTML()},
   sq:function(t){U.sq=t.value;$('#sellerList').innerHTML=sellerListHTML()},
   smq:function(t){var q=norm(t.value);document.querySelectorAll('.smrow').forEach(function(r){r.style.display=(q&&norm(r.dataset.n).indexOf(q)<0)?'none':''})},
