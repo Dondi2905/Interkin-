@@ -229,7 +229,7 @@ svg.map{background:var(--surface-2);border-radius:8px;border:1px solid var(--lin
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v58',APP_BUILD=39;
+var APP_VER='v59',APP_BUILD=39;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -1184,11 +1184,21 @@ function servicesHTML(rg,pdvs){
     return '<button class="item" style="width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line,#e5e7eb);padding:10px 0" data-a="svcCons" data-id="'+h.id+'"><div class="grow"><b>'+esc(h.name||'?')+'</b> · '+esc(pn(h.pdvId))+'<div class="small muted">'+dstr(h.openTs)+' · '+tm(h.openTs)+' – '+(h.closeTs?tm(h.closeTs):'en cours')+' · '+l.length+' vente(s) · '+fmt(t)+' FC</div></div><span class="muted">›</span></button>'}).join('');
   if(out.length){var t2=0;out.forEach(function(x){t2+=x.total});rows+='<button class="item" style="width:100%;text-align:left;background:none;border:0;padding:10px 0" data-a="svcCons" data-id="out" data-a1="'+rg.a+'" data-b1="'+rg.b+'" data-p="'+ids.join(',')+'"><div class="grow"><b>Hors service</b><div class="small muted">'+out.length+' vente(s) hors d’une ouverture de caisse · '+fmt(t2)+' FC</div></div><span class="muted">›</span></button>'}
   return '<div class="card" style="margin-top:12px"><div class="sub-h" style="margin-top:0">Services de la période</div>'+(rows||'<div class="hint">Aucun service sur cette période.</div>')+'<div class="hint" style="margin-top:6px">Touchez un service pour voir la consommation d’intrants de ses ventes.</div></div>'}
+function debtAlloc(){
+  var by={},al={};S.shifts.forEach(function(h){if(h.state==='closed'&&h.diff<0)(by[h.uid]=by[h.uid]||[]).push(h)});
+  Object.keys(by).forEach(function(uid){var rem=0;(S.repays||[]).forEach(function(r){if(r.uid===uid)rem+=r.amount});
+    by[uid].sort(function(a,b){return a.closeTs-b.closeTs}).forEach(function(h){var m=-h.diff,pd=Math.min(m,rem);rem=r2(rem-pd);al[h.id]={paid:r2(pd),left:r2(m-pd)}})});
+  return al}
 function alertsHTML(){
   var a=[],all=U.rpdv==='all';
   S.products.forEach(function(p){S.pdvs.forEach(function(pd){var s=st(p,pd.id);if(s!==null&&s<=LOW&&(all||U.rpdv===pd.id))a.push('<div class="note bad"><b>Stock bas</b> · '+esc(p.name)+' au PDV '+esc(pd.name)+' : '+s+' unité(s)</div>')})});
   S.ingredients.forEach(function(g){S.pdvs.forEach(function(pd){if(!all&&U.rpdv!==pd.id)return;var lc=lastCount(g.id,pd.id);if(lc&&!lc.ok)a.push('<div class="note bad"><b>'+(lc.strict?'Stock différent du comptage':'Consommation hors marge')+'</b> · '+esc(g.name)+' au PDV '+esc(pd.name)+' : '+(lc.strict?eTxt(lc):'écart '+eTxt(lc)+' (marge '+mgOf(g)+' %)')+'</div>')})});
-  S.shifts.filter(function(h){return h.state==='closed'&&h.diff&&Date.now()-h.closeTs<7*864e5}).slice(-5).forEach(function(h){a.push('<div class="note bad"><b>Écart de caisse</b> · '+esc(h.name)+' : '+(h.diff<0?'manque ':'excédent ')+fmt(Math.abs(h.diff))+' FC ('+dstr(h.closeTs)+')</div>')});
+  var al=debtAlloc();
+  S.shifts.filter(function(h){return h.state==='closed'&&h.diff&&Date.now()-h.closeTs<7*864e5}).slice(-5).forEach(function(h){
+    if(h.diff>0){a.push('<div class="note bad"><b>Écart de caisse</b> · '+esc(h.name)+' : excédent '+fmt(h.diff)+' FC ('+dstr(h.closeTs)+')</div>');return}
+    var q=al[h.id]||{paid:0,left:-h.diff};
+    if(q.left<=0)a.push('<div class="note good"><b>Manque remboursé</b> · '+esc(h.name)+' : '+fmt(-h.diff)+' FC ('+dstr(h.closeTs)+')</div>');
+    else a.push('<div class="note bad"><b>Écart de caisse</b> · '+esc(h.name)+' : manque '+fmt(-h.diff)+' FC ('+dstr(h.closeTs)+')'+(q.paid>0?' · remboursé '+fmt(q.paid)+' FC, <b>reste '+fmt(q.left)+' FC</b>':'')+'</div>')});
   var pend=S.resets.filter(function(r){return r.status==='pending'}).length;
   if(pend)a.push('<div class="note pts"><b>'+pend+' demande(s)</b> de réinitialisation de code secret en attente (onglet Gestion).</div>');
   return '<h2 class="h">Alertes</h2>'+(a.length?a.join(''):'<div class="note good">Aucune alerte.</div>');
