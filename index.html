@@ -229,7 +229,7 @@ svg.map{background:var(--surface-2);border-radius:8px;border:1px solid var(--lin
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v65',APP_BUILD=39;
+var APP_VER='v66',APP_BUILD=39;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -1232,7 +1232,7 @@ function reportsView(){
     h+='<div class="row sp" style="margin-top:22px"><h2 class="h" style="margin:0 2px">Par vendeur</h2><button class="btn sm" data-a="rateAllOpen">% pour tous</button></div><div class="card" style="margin-top:8px">'+sellerList().map(function(sl){var pd=pdvById(sl.pdvId),l=live(S.sales).filter(function(x){return x.sellerId===sl.id}),
         q=agg(inPeriod(l,U.rper)),t3=['today','week','month'].map(function(per){return agg(inPeriod(l,per)).total});
       return '<button class="rowbtn" data-a="sdetail" data-id="'+sl.id+'" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(sl.name)+(sl.gone?' (supprimé)':'')+'</div><div class="small muted">'+(pd?'PDV '+esc(pd.name)+' · ':'')+q.n+' ticket(s)</div>'
-        +'<div class="small num muted" style="margin-top:3px">Jour '+fmt(t3[0])+' · Semaine '+fmt(t3[1])+' · Mois '+fmt(t3[2])+'</div>'+(function(){var pi=payInfo(sl.id,U.rper);return (pi.mq?'<div class="small num bad">Manque de caisse − '+fmt(pi.mq)+' · base '+fmt(pi.base)+' FC</div>':'')+(pi.rate?'<div class="small num">Rémunération '+fmt(pi.rem)+' FC ('+pi.rate+' %)</div>':'')+(pi.debt>0?'<div class="small num bad">Dette de caisse '+fmt(pi.debt)+' FC</div>':'')})()+'</div><b class="num">'+fmt(q.total)+' FC</b></button>'}).join('')
+        +'<div class="small num muted" style="margin-top:3px">Jour '+fmt(t3[0])+' · Semaine '+fmt(t3[1])+' · Mois '+fmt(t3[2])+'</div>'+(function(){var pi=payInfo(sl.id,U.rper);return (pi.mq?(pi.left>0?'<div class="small num bad">Manque de caisse − '+fmt(pi.mq)+(pi.paid>0?' · remboursé '+fmt(pi.paid):'')+' · <b>reste '+fmt(pi.left)+'</b> · base '+fmt(pi.base)+' FC</div>':'<div class="small num good">Manque de '+fmt(pi.mq)+' FC remboursé · base '+fmt(pi.base)+' FC</div>'):'')+(pi.rate?'<div class="small num">Rémunération '+fmt(pi.rem)+' FC ('+pi.rate+' %)</div>':'')+(pi.debt>0?'<div class="small num bad">Dette de caisse '+fmt(pi.debt)+' FC</div>':'')})()+'</div><b class="num">'+fmt(q.total)+' FC</b></button>'}).join('')
       +'<div class="hint" style="margin-top:8px">Le montant de droite suit la période choisie ci-dessous. Touchez un vendeur pour voir ses ventes.</div></div>'}
   if(owner)h+=waterReport();
   h+='<h2 class="h">Tickets</h2><div class="card">'+(list.length?list.slice(0,60).map(function(s){var p=pdvById(s.pdvId);
@@ -1278,8 +1278,9 @@ function payInfo(uid,per){
   live(S.sales).forEach(function(x){if(x.sellerId===uid&&x.ts>=t0)ca+=x.total});
   S.shifts.forEach(function(h){if(h.uid!==uid||h.state!=='closed'||h.diff==null||!(h.diff<0))return;all+=-h.diff;if(h.closeTs>=t0){mq+=-h.diff;ns++}});
   (S.repays||[]).forEach(function(r){if(r.uid===uid)rp+=r.amount});
-  var base=Math.max(0,ca-mq),cu=S.rates&&S.rates[uid]!=null,rate=cu?S.rates[uid]:(S.rateAll||0);
-  return {ca:ca,mq:mq,ns:ns,base:base,rate:rate,custom:cu,rem:r2(base*rate/100),debt:r2(all-rp),rp:rp}
+  var al=debtAlloc(),left=0;S.shifts.forEach(function(h){if(h.uid===uid&&h.state==='closed'&&h.diff<0&&h.closeTs>=t0)left+=(al[h.id]?al[h.id].left:-h.diff)});left=Math.round(left);mq=Math.round(mq);var paid=Math.max(0,mq-left);
+  var base=Math.max(0,Math.round(ca-left)),cu=S.rates&&S.rates[uid]!=null,rate=cu?S.rates[uid]:(S.rateAll||0);
+  return {ca:ca,mq:mq,ns:ns,left:left,paid:paid,base:base,rate:rate,custom:cu,rem:Math.round(base*rate/100),debt:Math.round(all-rp),rp:rp}
 }
 function remunHTML(uid){
   var q=payInfo(uid,U.rper),rows=S.shifts.filter(function(h){return h.uid===uid&&h.state==='closed'&&h.diff<0&&h.closeTs>=periodStart(U.rper)}).sort(function(a,b){return b.closeTs-a.closeTs}).slice(0,8);
@@ -1287,8 +1288,9 @@ function remunHTML(uid){
   var row=function(l,v,c){return '<div class="item"><div class="grow muted">'+l+'</div><b class="num '+(c||'')+'">'+v+'</b></div>'};
   return '<div class="sub-h" style="margin-top:14px">Rémunération · '+PERLAB[U.rper]+'</div><div class="card">'
    +row('Chiffre d’affaires (points inclus)',fmt(q.ca)+' FC')
-   +row('Manques de caisse ('+q.ns+' service'+(q.ns>1?'s':'')+')',q.mq?'− '+fmt(q.mq)+' FC':'0 FC',q.mq?'bad':'')
-   +row('<b>Base de rémunération</b>','<b>'+fmt(q.base)+' FC</b>')
+   +row('Manques de caisse ('+q.ns+' service'+(q.ns>1?'s':'')+')',q.mq?'− '+fmt(q.mq)+' FC':'0 FC','')
+   +(q.mq?row('Remboursé',fmt(q.paid)+' FC','good')+row('Reste à rembourser',fmt(q.left)+' FC',q.left>0?'bad':'good'):'')
+   +row('<b>Base de rémunération</b> (CA − reste à rembourser)','<b>'+fmt(q.base)+' FC</b>')
    +row('Pourcentage',q.rate?q.rate+' % ('+(q.custom?'personnalisé':'commun')+')':q.custom?'0 % (personnalisé)':'non défini')
    +(q.rate?row('<b>Rémunération</b>','<b>'+fmt(q.rem)+' FC</b>'):'')
    +(rows.length?'<div class="hint" style="padding:8px 0 2px">Manques de la période : '+rows.map(function(h){return dstr(h.closeTs)+' −'+fmt(-h.diff)}).join(' · ')+'</div>':'')
