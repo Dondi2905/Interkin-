@@ -229,7 +229,7 @@ svg.map{background:var(--surface-2);border-radius:8px;border:1px solid var(--lin
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v56',APP_BUILD=39;
+var APP_VER='v57',APP_BUILD=39;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -1147,8 +1147,21 @@ function consoHTML(){
   });
   if(pdvs.length>1){var l2=live(S.sales).filter(function(x){return pdvs.some(function(pd){return pd.id===x.pdvId})&&inR(x)});
     h+='<div class="card" style="margin-top:12px"><div class="sub-h" style="margin-top:0">Total de tous les points de vente · '+l2.length+' vente(s)</div>'+rowsOf(consumption(l2))+'</div>'}
+  h+=servicesHTML(rg,pdvs);
   return h;
 }
+function consRows(m){var r=S.ingredients.filter(function(g){return m[g.id]>0}).map(function(g){return '<div class="item"><div class="grow">'+esc(g.name)+'</div><b class="num">'+qf(g,m[g.id])+'</b></div>'}).join('');return r||'<div class="hint" style="margin-top:8px">Aucun intrant consommé.</div>'}
+function svcSales(h){var e=h.closeTs||Date.now(),nx=S.shifts.filter(function(o){return o.id!==h.id&&o.pdvId===h.pdvId&&o.uid===h.uid&&o.openTs>h.openTs}).map(function(o){return o.openTs});return live(S.sales).filter(function(x){return x.pdvId===h.pdvId&&x.sellerId===h.uid&&x.ts>=h.openTs&&x.ts<=e&&!nx.some(function(t){return t<=x.ts})})}
+function tm(ts){return new Date(ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}
+function servicesHTML(rg,pdvs){
+  var ids=pdvs.map(function(pd){return pd.id}),sh=S.shifts.filter(function(h){return ids.indexOf(h.pdvId)>=0&&h.openTs>=rg.a&&h.openTs<rg.b}).sort(function(a,b){return b.openTs-a.openTs});
+  var inS={};sh.forEach(function(h){svcSales(h).forEach(function(x){inS[x.id]=1})});
+  var out=live(S.sales).filter(function(x){return ids.indexOf(x.pdvId)>=0&&x.ts>=rg.a&&x.ts<rg.b&&!inS[x.id]});
+  var pn=function(id){var pd=pdvById(id);return pd?pd.name:'?'};
+  var rows=sh.slice(0,40).map(function(h){var l=svcSales(h),t=0;l.forEach(function(x){t+=x.total});
+    return '<button class="item" style="width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line,#e5e7eb);padding:10px 0" data-a="svcCons" data-id="'+h.id+'"><div class="grow"><b>'+esc(h.name||'?')+'</b> · '+esc(pn(h.pdvId))+'<div class="small muted">'+dstr(h.openTs)+' · '+tm(h.openTs)+' – '+(h.closeTs?tm(h.closeTs):'en cours')+' · '+l.length+' vente(s) · '+fmt(t)+' FC</div></div><span class="muted">›</span></button>'}).join('');
+  if(out.length){var t2=0;out.forEach(function(x){t2+=x.total});rows+='<button class="item" style="width:100%;text-align:left;background:none;border:0;padding:10px 0" data-a="svcCons" data-id="out" data-a1="'+rg.a+'" data-b1="'+rg.b+'" data-p="'+ids.join(',')+'"><div class="grow"><b>Hors service</b><div class="small muted">'+out.length+' vente(s) hors d’une ouverture de caisse · '+fmt(t2)+' FC</div></div><span class="muted">›</span></button>'}
+  return '<div class="card" style="margin-top:12px"><div class="sub-h" style="margin-top:0">Services de la période</div>'+(rows||'<div class="hint">Aucun service sur cette période.</div>')+'<div class="hint" style="margin-top:6px">Touchez un service pour voir la consommation d’intrants de ses ventes.</div></div>'}
 function alertsHTML(){
   var a=[],all=U.rpdv==='all';
   S.products.forEach(function(p){S.pdvs.forEach(function(pd){var s=st(p,pd.id);if(s!==null&&s<=LOW&&(all||U.rpdv===pd.id))a.push('<div class="note bad"><b>Stock bas</b> · '+esc(p.name)+' au PDV '+esc(pd.name)+' : '+s+' unité(s)</div>')})});
@@ -1252,6 +1265,7 @@ function remunHTML(uid){
    +row('Manques cumulés − remboursements','<span class="'+(q.debt>0?'bad':'good')+'">'+fmt(q.debt)+' FC</span>')
    +rps.map(function(r){return '<div class="item"><div class="grow small muted">'+dstr(r.ts)+(r.note?' · '+esc(r.note):'')+'</div><span class="num">− '+fmt(r.amount)+' FC</span><button class="btn sm danger" data-a="repayDel" data-id="'+r.id+'" data-uid="'+uid+'">×</button></div>'}).join('')
    +'</div><div class="row" style="margin-top:8px"><button class="btn primary grow" data-a="repayOpen" data-id="'+uid+'">Enregistrer un remboursement</button></div>'
+   +'<div class="sub-h" style="margin-top:14px">Consommation d’intrants · '+PERLAB[U.rper]+'</div><div class="card">'+consRows(consumption(live(S.sales).filter(function(x){return x.sellerId===uid&&x.ts>=periodStart(U.rper)})))+'</div>'
 }
 function sellerList(){
   var m={};S.users.forEach(function(u){if(u.role==='seller')m[u.id]={id:u.id,name:u.name,pdvId:u.pdvId}});
@@ -1521,7 +1535,7 @@ function startSession(u,silent){
 }
 function logoutNow(){if(U.user)logEv('logout','Déconnexion');U.user=null;S.session=null;resetSale();save();render();if(SYNC_ON)Sync.logout()}
 var STOCK_ACT={wSave:1,ingPackSave:1,scConfirm:1,delIngDo:1,saveMulti:1,addStock:1,saveStock:1,saveProd:1,delProd:1,saveIng:1,saveCount:1,countIng:1};
-var OWNER_ONLY={drawAsk:1,drawDo:1,rateAllOpen:1,rateAllSave:1,rateOpen:1,rateSave:1,repayOpen:1,repaySave:1,repayDel:1,saveClean:1,wOpen:1,wSave:1,ingPackOpen:1,ingPackSave:1,scOpen:1,scReview:1,scBack:1,scConfirm:1,cntFlag:1,ctAdd:1,ctDel:1,smFill:1,delIngAsk:1,delIngDo:1,stockMulti:1,saveMulti:1,stockItem:1,stockGo:1,slowToggle:1,lockAsk:1,lockDo:1,unlockSeller:1,shiftDetail:1,editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
+var OWNER_ONLY={svcCons:1,drawAsk:1,drawDo:1,rateAllOpen:1,rateAllSave:1,rateOpen:1,rateSave:1,repayOpen:1,repaySave:1,repayDel:1,saveClean:1,wOpen:1,wSave:1,ingPackOpen:1,ingPackSave:1,scOpen:1,scReview:1,scBack:1,scConfirm:1,cntFlag:1,ctAdd:1,ctDel:1,smFill:1,delIngAsk:1,delIngDo:1,stockMulti:1,saveMulti:1,stockItem:1,stockGo:1,slowToggle:1,lockAsk:1,lockDo:1,unlockSeller:1,shiftDetail:1,editClient:1,saveEditClient:1,newProd:1,editProd:1,saveProd:1,delProd:1,addStock:1,saveStock:1,newIng:1,saveIng:1,countIng:1,saveCount:1,saveMargin:1,rmLogo:1,geoToggle:1,pingAll:1,addPdv:1,delPdv:1,resetOwner:1,approveReset:1,rejectReset:1,cancelAsk:1,cancelDo:1,mgtab:1,addSeller:1,delSeller:1,pwSeller:1,pwDo:1,setFloat:1,addWithdraw:1,forceClose:1,resetDemo:1,sdetail:1,pvdetail:1,phoneAsk:1,phoneDo:1,forceOutSeller:1};
 
 /* rendu général */
 function tabView(){
@@ -1895,6 +1909,10 @@ var A={
     out.innerHTML='<div class="card" style="margin-top:12px"><div class="muted small">'+esc(c.name)+'</div><div class="v pts" style="font:600 28px/1.2 var(--font-head)">'+fmt(balance(c.id))+' points</div><div class="small muted">1 point = 1 FC · vos points n’expirent jamais</div></div>'
       +(led.length?'<div class="card" style="margin-top:10px">'+led.map(function(l){return '<div class="item"><div class="grow small">'+esc(l.note)+'<div class="muted">'+dstr(l.ts)+'</div></div><b class="num '+(l.pts>0?'good':'bad')+'">'+(l.pts>0?'+':'')+fmt(l.pts)+'</b></div>'}).join('')+'</div>':'')},
   rcp:function(d){U.rcp=d.v;render()},
+  svcCons:function(d){var l,ttl,sub;
+    if(d.id==='out'){var ids=String(d.p).split(','),a=+d.a1,b=+d.b1,inS={};S.shifts.forEach(function(h){if(ids.indexOf(h.pdvId)>=0)svcSales(h).forEach(function(x){inS[x.id]=1})});l=live(S.sales).filter(function(x){return ids.indexOf(x.pdvId)>=0&&x.ts>=a&&x.ts<b&&!inS[x.id]});ttl='Ventes hors service';sub=l.length+' vente(s)'}
+    else{var h=S.shifts.filter(function(x){return x.id===d.id})[0];if(!h)return;l=svcSales(h);var pd=pdvById(h.pdvId);ttl='Service de '+esc(h.name||'?');sub=esc(pd?pd.name:'?')+' · '+dstr(h.openTs)+' · '+tm(h.openTs)+' – '+(h.closeTs?tm(h.closeTs):'en cours')+' · '+l.length+' vente(s)'}
+    openModal('<h3>'+ttl+'</h3><div class="hint">'+sub+'. Quantités calculées d’après les recettes des produits vendus.</div><div class="card" style="margin-top:10px">'+consRows(consumption(l))+'</div><button class="btn primary wide" style="margin-top:12px" data-a="closeModal">Fermer</button>')},
   pdetail:function(d){var lab={today:'Aujourd’hui',week:'Cette semaine',month:'Ce mois'};profitDetail(inPeriod(baseSales(),d.per),(d.m==='ca'?'Chiffre d’affaires · ':'Bénéfice · ')+lab[d.per],d.m==='ca')},
   pday:function(d){var t=+d.t;profitDetail(baseSales().filter(function(x){return x.ts>=t&&x.ts<t+864e5}),(d.m==='ca'?'Chiffre d’affaires du ':'Bénéfice du ')+dstr(t),d.m==='ca')},
   openSale:function(d){var s=S.sales.find(function(x){return x.id===d.id});if(s)showTicket(s,false)},
