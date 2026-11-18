@@ -229,7 +229,7 @@ svg.map{background:var(--surface-2);border-radius:8px;border:1px solid var(--lin
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v57',APP_BUILD=39;
+var APP_VER='v58',APP_BUILD=39;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -1153,6 +1153,28 @@ function consoHTML(){
 function consRows(m){var r=S.ingredients.filter(function(g){return m[g.id]>0}).map(function(g){return '<div class="item"><div class="grow">'+esc(g.name)+'</div><b class="num">'+qf(g,m[g.id])+'</b></div>'}).join('');return r||'<div class="hint" style="margin-top:8px">Aucun intrant consommé.</div>'}
 function svcSales(h){var e=h.closeTs||Date.now(),nx=S.shifts.filter(function(o){return o.id!==h.id&&o.pdvId===h.pdvId&&o.uid===h.uid&&o.openTs>h.openTs}).map(function(o){return o.openTs});return live(S.sales).filter(function(x){return x.pdvId===h.pdvId&&x.sellerId===h.uid&&x.ts>=h.openTs&&x.ts<=e&&!nx.some(function(t){return t<=x.ts})})}
 function tm(ts){return new Date(ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}
+function svcDetail(h,l){
+  var cm=consumption(l),rows=(h.sc&&h.sc.rows)||[],open=!h.closeTs,pdv=h.pdvId,out='';
+  var rI={},rP={};rows.forEach(function(r){if(r.kind==='p')rP[r.ing]=r;else rI[r.ing]=r});
+  var ids=Object.keys(cm).filter(function(k){return cm[k]>0});Object.keys(rI).forEach(function(k){if(ids.indexOf(k)<0)ids.push(k)});
+  var iRows=ids.map(function(id){var g=ingById(id);if(!g)return '';var c=cm[id]||0,r=rI[id],en='',cp='';
+    if(r){var exp=r6(r.cnt-r.diff),w=r.strict?0:r6((r.theo||0)*mgOf(g)/100);
+      en='Attendu à la fin : <b>'+(w>0?qf(g,Math.max(0,r6(exp-w)))+' à '+qf(g,r6(exp+w)):qf(g,exp))+'</b>';
+      cp='Compté : <b class="'+(r.ok?'good':'bad')+'">'+qf(g,r.cnt)+'</b> · '+(r.strict?uTxt(r.diff):eTxt({strict:false,diff:r.diff,pct:r.pct,u:unit(g),g:g}))}
+    else if(open){var sg=g.stock&&g.stock[pdv];if(sg){var ex=sg.cur,w2=isCnt(g)?0:r6((sg.used||0)*mgOf(g)/100);en='Stock attendu maintenant : <b>'+(w2>0?qf(g,Math.max(0,r6(ex-w2)))+' à '+qf(g,r6(ex+w2)):qf(g,ex))+'</b>'}}
+    return '<div class="item" style="display:block"><div><b>'+esc(g.name)+'</b> · consommé '+qf(g,c)+'</div>'+(en?'<div class="small">'+en+'</div>':'')+(cp?'<div class="small">'+cp+'</div>':'')+'</div>'}).join('');
+  var sold={};l.forEach(function(x){(x.items||[]).forEach(function(it){sold[it.id]=(sold[it.id]||0)+it.qty})});
+  var pr=Object.keys(sold).map(function(id){return S.products.filter(function(p){return p.id===id})[0]}).filter(function(p){return p&&st(p,pdv)!==null});
+  Object.keys(rP).forEach(function(k){var p=S.products.filter(function(x){return x.id===k})[0];if(p&&pr.indexOf(p)<0)pr.push(p)});
+  var pRows=pr.map(function(p){var r=rP[p.id],en='';
+    if(r)en='Attendu à la fin : <b>'+r.exp+'</b> · Compté : <b class="'+(r.ok?'good':'bad')+'">'+r.cnt+'</b> · '+(r.ok?'Juste':(r.diff<0?'Manque ':'Excédent +')+Math.abs(r.diff)+' unité'+(Math.abs(r.diff)>1?'s':''));
+    else if(open)en='Stock attendu maintenant : <b>'+st(p,pdv)+'</b>';
+    return '<div class="item" style="display:block"><div><b>'+esc(p.name)+'</b> · vendu '+(sold[p.id]||0)+'</div>'+(en?'<div class="small">'+en+'</div>':'')+'</div>'}).join('');
+  out+='<div class="sub-h" style="margin-top:10px">Intrants</div><div class="card">'+(iRows||'<div class="hint">Aucun intrant consommé.</div>')+'</div>';
+  out+='<div class="sub-h" style="margin-top:10px">Produits en stock</div><div class="card">'+(pRows||'<div class="hint">Aucun produit suivi en stock vendu.</div>')+'</div>';
+  if(!h.sc&&!open)out+='<div class="hint" style="margin-top:8px">Aucun comptage de stock n’a été fait pour ce service : l’intervalle attendu en fin de service n’est pas disponible.</div>';
+  else out+='<div class="hint" style="margin-top:8px">L’intervalle d’un intrant mesuré = quantité attendue ± la marge appliquée à sa consommation. Les intrants en unités et les produits doivent tomber juste.</div>';
+  return out}
 function servicesHTML(rg,pdvs){
   var ids=pdvs.map(function(pd){return pd.id}),sh=S.shifts.filter(function(h){return ids.indexOf(h.pdvId)>=0&&h.openTs>=rg.a&&h.openTs<rg.b}).sort(function(a,b){return b.openTs-a.openTs});
   var inS={};sh.forEach(function(h){svcSales(h).forEach(function(x){inS[x.id]=1})});
@@ -1911,7 +1933,7 @@ var A={
   rcp:function(d){U.rcp=d.v;render()},
   svcCons:function(d){var l,ttl,sub;
     if(d.id==='out'){var ids=String(d.p).split(','),a=+d.a1,b=+d.b1,inS={};S.shifts.forEach(function(h){if(ids.indexOf(h.pdvId)>=0)svcSales(h).forEach(function(x){inS[x.id]=1})});l=live(S.sales).filter(function(x){return ids.indexOf(x.pdvId)>=0&&x.ts>=a&&x.ts<b&&!inS[x.id]});ttl='Ventes hors service';sub=l.length+' vente(s)'}
-    else{var h=S.shifts.filter(function(x){return x.id===d.id})[0];if(!h)return;l=svcSales(h);var pd=pdvById(h.pdvId);ttl='Service de '+esc(h.name||'?');sub=esc(pd?pd.name:'?')+' · '+dstr(h.openTs)+' · '+tm(h.openTs)+' – '+(h.closeTs?tm(h.closeTs):'en cours')+' · '+l.length+' vente(s)'}
+    else{var h=S.shifts.filter(function(x){return x.id===d.id})[0];if(!h)return;l=svcSales(h);var pd=pdvById(h.pdvId);ttl='Service de '+esc(h.name||'?');sub=esc(pd?pd.name:'?')+' · '+dstr(h.openTs)+' · '+tm(h.openTs)+' – '+(h.closeTs?tm(h.closeTs):'en cours')+' · '+l.length+' vente(s)';openModal('<h3>'+ttl+'</h3><div class="hint">'+sub+'. Consommations calculées d’après les recettes des produits vendus.</div><div style="max-height:62vh;overflow:auto">'+svcDetail(h,l)+'</div><button class="btn primary wide" style="margin-top:12px" data-a="closeModal">Fermer</button>');return}
     openModal('<h3>'+ttl+'</h3><div class="hint">'+sub+'. Quantités calculées d’après les recettes des produits vendus.</div><div class="card" style="margin-top:10px">'+consRows(consumption(l))+'</div><button class="btn primary wide" style="margin-top:12px" data-a="closeModal">Fermer</button>')},
   pdetail:function(d){var lab={today:'Aujourd’hui',week:'Cette semaine',month:'Ce mois'};profitDetail(inPeriod(baseSales(),d.per),(d.m==='ca'?'Chiffre d’affaires · ':'Bénéfice · ')+lab[d.per],d.m==='ca')},
   pday:function(d){var t=+d.t;profitDetail(baseSales().filter(function(x){return x.ts>=t&&x.ts<t+864e5}),(d.m==='ca'?'Chiffre d’affaires du ':'Bénéfice du ')+dstr(t),d.m==='ca')},
