@@ -211,7 +211,7 @@ svg.map{background:var(--surface-2);border-radius:8px;border:1px solid var(--lin
       d.onclick=function(){d.remove()};document.body.appendChild(d)}
     var ua=(navigator.userAgent.match(/Chrome\/[\d.]+/)||['?'])[0];
     d.textContent='Erreur (touchez pour fermer) : '+m+'\n'+ua}catch(e){}}
-  var DBG=false;try{if(/[?&]debug=1/.test(location.search))localStorage.setItem('interkin-debug','1');if(/[?&]debug=0/.test(location.search))localStorage.removeItem('interkin-debug');DBG=localStorage.getItem('interkin-debug')==='1'}catch(e){}
+  var DBG=false;try{localStorage.removeItem('interkin-debug');DBG=/[?&]debug=1/.test(location.search)}catch(e){}
   var lines=[];window.dbg=function(m){if(!DBG)return;try{
     lines.push(new Date().toLocaleTimeString('fr-FR')+' '+m);if(lines.length>9)lines.shift();
     var d=document.getElementById('dbgbar');
@@ -229,7 +229,7 @@ svg.map{background:var(--surface-2);border-radius:8px;border:1px solid var(--lin
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v64',APP_BUILD=39;
+var APP_VER='v65',APP_BUILD=39;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
