@@ -224,12 +224,61 @@ svg.map{background:var(--surface-2);border-radius:8px;border:1px solid var(--lin
 })();
 </script>
 <script>
+/* ---------- stockage local : IndexedDB (grande capacité), repli sur localStorage ---------- */
 (function(){
+var DBN='interkin-idb',OS='kv',MEM={},db=null,ok=false,lazy={},timer=null,failCb=null,failed=false;
+function lsGet(k){try{return localStorage.getItem(k)}catch(e){return null}}
+function fail(){failed=true;if(failCb)try{failCb()}catch(e){}}
+function open(cb){
+  var done=false;function fin(){if(done)return;done=true;clearTimeout(to);cb()}
+  var to=setTimeout(fin,4000);
+  try{
+    if(typeof indexedDB==='undefined'||!indexedDB){fin();return}
+    var rq=indexedDB.open(DBN,1);
+    rq.onupgradeneeded=function(){try{rq.result.createObjectStore(OS)}catch(e){}};
+    rq.onsuccess=function(){
+      if(done){try{rq.result.close()}catch(e){}return}
+      db=rq.result;
+      try{
+        var tx=db.transaction(OS,'readonly'),os=tx.objectStore(OS),g=os.getAll(),gk=os.getAllKeys();
+        tx.oncomplete=function(){if(done)return;var ks=gk.result,vs=g.result;for(var i=0;i<ks.length;i++)MEM[ks[i]]=vs[i];ok=true;fin()};
+        tx.onerror=tx.onabort=function(){db=null;fin()};
+      }catch(e){db=null;fin()}
+    };
+    rq.onerror=rq.onblocked=function(){fin()};
+  }catch(e){fin()}
+}
+function get(k){if(Object.prototype.hasOwnProperty.call(MEM,k))return MEM[k];return lsGet(k)}
+function flush(){
+  clearTimeout(timer);timer=null;
+  var ks=Object.keys(lazy);if(!ks.length)return;
+  var vals={};
+  ks.forEach(function(k){try{vals[k]=lazy[k]()}catch(e){vals[k]=undefined}});lazy={};
+  ks.forEach(function(k){if(vals[k]!==undefined)MEM[k]=vals[k]});
+  function viaLS(){ks.forEach(function(k){if(vals[k]===undefined)return;try{localStorage.setItem(k,vals[k])}catch(e){fail()}})}
+  if(!ok||!db){viaLS();return}
+  try{
+    var tx=db.transaction(OS,'readwrite'),os=tx.objectStore(OS);
+    ks.forEach(function(k){if(vals[k]!==undefined)os.put(vals[k],k)});
+    tx.oncomplete=function(){ks.forEach(function(k){try{localStorage.removeItem(k)}catch(e){}})};
+    tx.onerror=tx.onabort=function(){viaLS()};
+  }catch(e){viaLS()}
+}
+function setLazy(k,fn){lazy[k]=fn;if(!timer)timer=setTimeout(flush,250)}
+window.KV={open:open,get:get,lazy:setLazy,flush:flush,isIDB:function(){return ok},failed:function(){return failed},onFail:function(f){failCb=f}};
+window.__KVBOOT=function(main){open(main)};
+window.addEventListener('pagehide',flush);
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')flush()});
+try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
+})();
+</script>
+<script>
+window.__KVBOOT(function(){
 'use strict';
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v66',APP_BUILD=39;
+var APP_VER='v67',APP_BUILD=39;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -317,12 +366,12 @@ function seed(){
     {id:'k2',ts:Date.now()-2*864e5,ingId:'i2',pdvId:'p1',theo:3000,actual:3090,pct:3,ok:true}];
   return S;
 }
-function load(){try{var r=localStorage.getItem(KEY);if(r){var o=JSON.parse(r);if(o&&o.v===2)return o}}catch(e){}return null}
+function load(){try{var r=KV.get(KEY);if(r){var o=JSON.parse(r);if(o&&o.v===2)return o}}catch(e){}return null}
 var DEVID=(function(){try{var d=localStorage.getItem('interkin-dev');if(!d){d=Math.random().toString(36).slice(2,5);localStorage.setItem('interkin-dev',d)}return d}catch(e){return 'x'+Math.random().toString(36).slice(2,4)}})();
 function blank(){return {v:2,seq:200,saleSeq:0,geoEnabled:true,margin:7,moves:[],counts:[],counters:[],pdvs:[],ingredients:[],products:[],customers:[],ledger:[],sales:[],positions:[],resets:[],merges:[],users:[],shifts:[],withdrawals:[],log:[],floats:{}}}
 var S=load()||(SYNC_ON?blank():seed());
 function nid(){return (SYNC_ON?DEVID:'')+(++S.seq)}
-function nextNo(pdv){var m=0;S.sales.forEach(function(x){if(x.pdvId===pdv&&x.no>m)m=x.no});return m+1}
+function nextNo(pdv){var m=(S.noMax&&S.noMax[pdv])||0;S.sales.forEach(function(x){if(x.pdvId===pdv&&x.no>m)m=x.no});return m+1}
 /* ---------- comptes, caisse, journal ---------- */
 var hashPw=function(pw,id){return cyrb53(pw+':'+id+':interkin-pw')};
 function ensureAccounts(S){
@@ -341,7 +390,24 @@ var LOGO0='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJYAAADAAQAAAADOraelAAA
 var brand=function(){if(!S.brand)S.brand={name:'',slogan:'',logo:'',lw:0,lh:0};if(S.brand.name==='FFLEXY POS')S.brand.name='';
   if(!S.brand.logo&&!S.brand.noLogo){S.brand.logo=LOGO0;S.brand.lw=150;S.brand.lh=192}
   return S.brand};
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}if(typeof Sync!=='undefined')Sync.kick()}
+/* ---------- historique gardé sur l'appareil ---------- */
+function keepCfg(r){return r==='o'?{days:365,cap:S.keepCap||30000}:{days:3,cap:2500}}
+function archiveOld(force){
+  if(!SYNC_ON||typeof Sync==='undefined')return;
+  var role=Sync.role();if(!role)return;role=role==='owner'?'o':'s';
+  var now=Date.now();if(!force&&now-(archiveOld.t||0)<600000)return;archiveOld.t=now;
+  var cfg=keepCfg(role),cut=now-cfg.days*864e5,st=Sync.ST(),keep=[],n=0;
+  if(S.sales.length>cfg.cap){var ts=S.sales.map(function(x){return x.ts}).sort(function(a,b){return b-a});if(ts[cfg.cap-1]>cut)cut=ts[cfg.cap-1]}
+  S.noMax=S.noMax||{};
+  S.sales.forEach(function(x){
+    if(x.ts<cut&&!x.pending&&st.base['sales/'+x.id]!==undefined){n++;if(!(S.noMax[x.pdvId]>=x.no))S.noMax[x.pdvId]=x.no;delete st.base['sales/'+x.id]}else keep.push(x)});
+  if(n){S.sales=keep;S.arch=Math.max(S.arch||0,cut);save();Sync.persist()}
+  else if(!S.arch){S.arch=cut;save()}
+}
+function archNote(){
+  if(!SYNC_ON||!S.arch||periodStart(U.rper)>=S.arch)return '';
+  return '<div class="note" style="margin-top:10px;background:#fff4e5;color:#b54708"><b>Historique incomplet</b><div class="small">Cet appareil ne garde que les ventes depuis le '+dstr(S.arch)+'. Les chiffres de cette période sont partiels ; les ventes plus anciennes restent sauvegardées sur le serveur.</div></div>'}
+function save(){KV.lazy(KEY,function(){return JSON.stringify(S)});if(typeof Sync!=='undefined')Sync.kick()}
 
 /* ---------- état d'interface ---------- */
 var U={online:(typeof navigator==='undefined'||navigator.onLine!==false),user:null,lrole:'matin',lpdv:null,tab:'sale',cart:[],client:undefined,cq:'',usePoints:false,unlocked:false,pts:'',cash:'',keep:false,
@@ -1220,7 +1286,7 @@ function reportsView(){
      +'<h2 class="h">Détail par période</h2>';
   }else h+='<p class="hint" style="margin:8px 0 0">Vos ventes : '+esc(whoName(u))+'.</p>';
   var per=[['today','Jour'],['week','Semaine'],['month','Mois'],['all','Tout']].map(function(x){return '<button data-a="rper" data-v="'+x[0]+'" aria-pressed="'+(U.rper===x[0])+'">'+x[1]+'</button>'}).join('');
-  h+='<div class="seg" style="margin-top:'+(owner?0:12)+'px">'+per+'</div><div class="kpis" style="margin-top:14px">'
+  h+='<div class="seg" style="margin-top:'+(owner?0:12)+'px">'+per+'</div>'+archNote()+'<div class="kpis" style="margin-top:14px">'
    +'<div class="kpi"><div class="k">Ventes</div><div class="v">'+fmt(a.total)+' FC</div><div class="s">'+a.n+' ticket(s)</div></div>'
    +(owner?'<div class="kpi"><div class="k">Bénéfice</div><div class="v '+(a.profit<0?'bad':'good')+'">'+fmt(a.profit)+' FC</div><div class="s">marge '+(a.total>0?Math.round(a.profit/a.total*100):0)+' % · achats '+fmt(a.cogs)+'</div></div>':'')
    +'<div class="kpi"><div class="k">Payé en points</div><div class="v pts">'+fmt(a.disc)+' FC</div><div class="s">points des clients devenus argent de l’entreprise</div></div>'
@@ -1355,6 +1421,7 @@ function manageGen(){
    +'<div class="hint" style="margin-top:6px">Un comptage dont l’écart dépasse cette marge déclenche une alerte.</div>'
    +'<div class="sub-h" style="margin-top:14px">Personnes de confiance pour le comptage</div>'+(S.counters.length?'<div style="margin-bottom:8px">'+S.counters.map(function(n,i){return '<span class="chip">'+esc(n)+' <button class="btn sm" style="padding:0 6px" data-a="ctDel" data-idx="'+i+'" aria-label="Retirer '+esc(n)+'">✕</button></span>'}).join(' ')+'</div>':'')
    +'<div class="row"><input id="ctn" class="inp grow" maxlength="40" placeholder="Nom (ex. Marie)"><button class="btn primary" data-a="ctAdd">Ajouter</button></div>'
+   +(SYNC_ON?'<div class="sub-h" style="margin-top:14px">Ventes gardées sur cet appareil</div><div class="row"><select id="kcap" class="sel grow" data-c="keepCap">'+[15000,30000,60000,100000].map(function(n){return '<option value="'+n+'"'+((S.keepCap||30000)===n?' selected':'')+'>'+fmt(n)+' ventes récentes</option>'}).join('')+'</select></div><div class="hint">Les ventes plus anciennes restent sur le serveur mais ne sont plus affichées ici : plus ce nombre est grand, plus l’appareil est lent. Réglage propre à cet appareil.</div>':'')
    +'<div class="hint" style="margin-top:14px">Version de l’application : <b>'+APP_VER+'</b></div><div class="hint" style="margin-top:6px">À chaque clôture de caisse, une tâche « Stock à compter » vous attend. Les intrants marqués « Compter à la clôture » (onglet Stock) y figurent ; si aucun n’est marqué, tous y figurent.</div></div>';
   h+='<h2 class="h">Points de vente</h2><div class="card">'+S.pdvs.map(function(p){var sl=S.users.filter(function(u){return u.role==='seller'&&u.pdvId===p.id});return '<div class="item"><div class="grow"><b>'+esc(p.name)+'</b><div class="small muted">'+(sl.length?sl.map(function(u){return esc(u.name)}).join(' · '):'Aucun vendeur')+'</div></div><button class="btn sm danger" data-a="delPdv" data-id="'+p.id+'">Supprimer</button></div>'}).join('')
    +'<label class="lbl" for="npdv">Nouveau point de vente</label><div class="row"><input id="npdv" class="inp grow" placeholder="Nom du point de vente"><button class="btn primary" data-a="addPdv">Ajouter</button></div></div>';
@@ -2021,6 +2088,7 @@ document.addEventListener('change',function(e){
   var k=e.target.dataset&&e.target.dataset.c;
   if(k==='lpdv')U.lpdv=e.target.value;
   if(k==='blogo'){var fl=e.target.files&&e.target.files[0];if(fl)processLogo(fl,function(u,w,h){if(!u){toast('Image illisible.');return}var b=brand();b.logo=u;b.lw=w;b.lh=h;b.noLogo=false;save();render();toast('Logo enregistré.')})}
+  if(k==='keepCap'){var kv=parseInt(e.target.value,10);if(kv){S.keepCap=kv;save();archiveOld(true);render();toast('Réglage enregistré.')}return}
   if(k==='rpdv'){U.rpdv=e.target.value;render()}
   if(k==='rday'){U.rday=e.target.value;render()}
   if(k==='spdv'){if(e.target.value==='*'){U.sall=true}else{U.sall=false;U.spdv=e.target.value}render()}
@@ -2044,9 +2112,9 @@ var Sync=(function(){
   var SK='interkin-sync-v1',HALT={halt:1};
   var ST=readSt(),busy=null,timer=null,needRender=false,refreshing=null,again=false,tick=0;
   function rid(){return Math.random().toString(36).slice(2,10)}
-  function readSt(){try{var o=JSON.parse(localStorage.getItem(SK));if(o&&o.v===1)return o}catch(e){}return {v:1,sid:'',base:{},cur:{},creds:{},auth:null,rej:[],last:0}}
-  function writeSt(){try{localStorage.setItem(SK,JSON.stringify(ST))}catch(e){}}
-  function rawSave(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+  function readSt(){try{var o=JSON.parse(KV.get(SK));if(o&&o.v===1)return o}catch(e){}return {v:1,sid:'',base:{},cur:{},creds:{},auth:null,rej:[],last:0}}
+  function writeSt(){KV.lazy(SK,function(){return JSON.stringify(ST)})}
+  function rawSave(){KV.lazy(KEY,function(){return JSON.stringify(S)})}
   function nerr(m,st){var e=new Error(m);e.status=st;return e}
   function stab(v){if(v===null||typeof v!=='object')return JSON.stringify(v);
     if(Array.isArray(v))return '['+v.map(stab).join(',')+']';
@@ -2060,6 +2128,9 @@ var Sync=(function(){
   var ARR={pdvs:'pdvs',customers:'customers',ledger:'ledger',sales:'sales',shifts:'shifts',withdrawals:'withdrawals',resets:'resets',counts:'counts'};
   var ARR0={log:'log',positions:'positions',moves:'moves',merges:'merges'};
 
+  /* les ventes et mouvements de points ne changent presque jamais : on ne recalcule leur empreinte que s'ils ont changé */
+  var HC=typeof WeakMap!=='undefined'?new WeakMap():null;
+  function memoH(o,sig,mk){var c=HC&&HC.get(o);if(c&&c.s===sig)return {h:c.h};var d=mk(),h=cyrb53(stab(d));if(HC)HC.set(o,{s:sig,h:h});return {h:h,d:d}}
   function recs(){
     var R={};
     function add(coll,id,pdv,data){R[coll+'/'+id]={coll:coll,id:id,pdv:pdv||null,data:data,h:cyrb53(stab(data))}}
@@ -2069,8 +2140,11 @@ var Sync=(function(){
     S.ingredients.forEach(function(g){var d=Object.assign({},g);delete d.stock;add('ingredients',g.id,null,d);
       Object.keys(g.stock||{}).forEach(function(k){if(g.stock[k])add('istock','i:'+g.id+':'+k,k,g.stock[k])})});
     S.customers.forEach(function(c){add('customers',c.id,null,c)});
-    S.ledger.forEach(function(l){add('ledger',l.id,null,l)});
-    S.sales.forEach(function(x){var d=Object.assign({},x);delete d.pending;add('sales',x.id,x.pdvId,d)});
+    S.ledger.forEach(function(l){var m=memoH(l,l.acc+'|'+l.pts+'|'+l.type+'|'+l.ts+'|'+l.note+'|'+l.saleId+'|'+l.of,function(){return l});
+      R['ledger/'+l.id]={coll:'ledger',id:l.id,pdv:null,data:m.d||null,h:m.h,mk:function(){return l}}});
+    S.sales.forEach(function(x){var mk=function(){var d=Object.assign({},x);delete d.pending;return d},
+      m=memoH(x,(x.cancelled?1:0)+'|'+x.custId+'|'+x.custName+'|'+x.sellerId+'|'+x.sellerName+'|'+x.balanceAfter+'|'+x.total+'|'+x.cashPaid,mk);
+      R['sales/'+x.id]={coll:'sales',id:x.id,pdv:x.pdvId||null,data:m.d||null,h:m.h,mk:mk}});
     S.shifts.forEach(function(x){add('shifts',x.id,x.pdvId,x)});
     S.withdrawals.forEach(function(x){add('withdrawals',x.id,x.pdvId,x)});
     S.resets.forEach(function(x){add('resets',x.id,x.pdvId,x)});
@@ -2222,7 +2296,7 @@ var Sync=(function(){
     var role=ST.auth.profile.role==='owner'?'o':'s',R=recs(),rows=[];
     Object.keys(R).forEach(function(k){var r=R[k],m=SPEC[r.coll][role];if(!m)return;
       if((r.coll==='stock'||r.coll==='istock')&&!api.stockDirty)return;
-      if(ST.base[k]!==r.h){r.mode=m;rows.push(r)}});
+      if(ST.base[k]!==r.h){if(!r.data&&r.mk)r.data=r.mk();r.mode=m;rows.push(r)}});
     if(role==='o')Object.keys(ST.base).forEach(function(k){if(R[k])return;var c=k.slice(0,k.indexOf('/'));
       if(!TOMB[c])return;if((c==='stock'||c==='istock')&&!api.stockDirty)return;
       rows.push({coll:c,id:k.slice(c.length+1),pdv:null,data:{},del:true,mode:'u'})});
@@ -2237,11 +2311,14 @@ var Sync=(function(){
 
   /* ----- réception ----- */
   function pull(){
-    var a=ST.auth,uid=a.uid,cur=ST.cur[uid]||null,rows=[];
+    var a=ST.auth,uid=a.uid,cur=ST.cur[uid]||null,rows=[],fo='';
     function more(filter){return call('GET','/rest/v1/records?select=coll,id,pdv_id,data,deleted,updated_at&order=updated_at.asc&limit=1000'+filter).then(function(r){
-      rows=rows.concat(r);if(r.length>=1000)return more('&updated_at=gt.'+encodeURIComponent(r[r.length-1].updated_at))})}
+      rows=rows.concat(r);if(r.length>=1000)return more('&updated_at=gt.'+encodeURIComponent(r[r.length-1].updated_at)+fo)})}
     var f=cur?'&updated_at=gte.'+encodeURIComponent(new Date(Date.parse(cur)-10000).toISOString()):'';
-    return more(f).then(function(){
+    if(!S.arch){var kc=keepCfg(a.profile.role==='owner'?'o':'s');S.arch=Date.now()-kc.days*864e5}
+    /* première réception : on ne télécharge pas les anciennes ventes ni les anciens journaux */
+    if(!cur&&S.arch)fo='&or='+encodeURIComponent('(coll.in.(products,ingredients,pdvs,config,stock,istock,customers,ledger,shifts,withdrawals,floats,resets,pay),updated_at.gte.'+new Date(S.arch).toISOString()+')');
+    return more(f+fo).catch(function(e){if(fo&&e&&e.status===400){fo='';rows=[];return more(f)}throw e}).then(function(){
       var ch=applyAll(rows,a.profile.role==='owner');
       if(rows.length)ST.cur[uid]=rows[rows.length-1].updated_at;
       if(a.profile.role==='owner'&&!rows.length&&!cur&&!S.pdvs.length&&!S.products.length){seedCatalog();ch=true}
@@ -2259,6 +2336,7 @@ var Sync=(function(){
     var pass=rows.filter(function(r){return r.coll!=='stock'&&r.coll!=='istock'}).concat(rows.filter(function(r){return r.coll==='stock'||r.coll==='istock'}));
     pass.forEach(function(r){
       var k=r.coll+'/'+r.id,c=cur[k],isSt=r.coll==='stock'||r.coll==='istock';
+      if(r.coll==='sales'&&!c&&S.arch&&r.data&&r.data.ts<S.arch)return;   /* vente plus ancienne que l'historique gardé ici */
       if(isSt){if((owner&&api.stockDirty)||unsent)return}
       else if(SPEC[r.coll][owner?'o':'s']){
         if(c&&ST.base[k]!==c.h)return;                       /* modification locale pas encore envoyée */
@@ -2283,7 +2361,7 @@ var Sync=(function(){
     var fresh=!ST.cur[ST.auth.uid],chg=false,seller=ST.auth.profile.role==='seller';
     return ensureTok().then(checkProfile).then(function(){return fresh?pull():push()}).then(function(c){chg=c;return fresh?push():pull()}).then(function(c){chg=chg||c===true;return flushPins()})
       .then(function(c){chg=chg||c===true;if(seller&&!api.catDone){api.catDone=true;return pullCatalog().then(function(x){chg=chg||x})}})
-      .then(function(){ST.last=Date.now();writeSt();setNet(true);return chg});
+      .then(function(){ST.last=Date.now();writeSt();setNet(true);try{archiveOld()}catch(e){console.warn('archive',e)}return chg});
   }
   function cycle(force){
     if(busy){again=true;return busy}
@@ -2338,7 +2416,7 @@ var Sync=(function(){
       +'<div class="item"><div class="grow muted">Ventes en attente d’envoi</div><b class="num">'+n+'</b></div>'
       +(rj.length?'<div class="note bad" style="margin-top:8px"><b>'+rj.length+' élément(s) refusé(s) par le serveur</b><div class="small">'+esc(rj[0].k+' : '+rj[0].msg)+'</div></div>':'');
   }
-  var api={ST:function(){return ST},setPin:setPin,requestUnlock:requestUnlock,login:login,logout:logout,first:first,kick:kick,start:start,init:init,settle:settle,rpc:rpc,profiles:profiles,msg:msg,
+  var api={ST:function(){return ST},persist:function(){writeSt()},setPin:setPin,requestUnlock:requestUnlock,login:login,logout:logout,first:first,kick:kick,start:start,init:init,settle:settle,rpc:rpc,profiles:profiles,msg:msg,
     pend:pendCount,statusHTML:statusHTML,cycle:function(){return cycle()},stockDirty:false,started:false,
     renamePhone:function(o,n){if(ST.creds[o]){ST.creds[n]=ST.creds[o];delete ST.creds[o]}if(ST.auth&&ST.auth.phone===o)ST.auth.phone=n;writeSt()},
     dirtyStock:function(){api.stockDirty=true;kick(400)},
@@ -2347,10 +2425,12 @@ var Sync=(function(){
   return api;
 })();
 
+KV.onFail(function(){toast('Mémoire de l’appareil pleine ou bloquée : certaines données risquent de ne pas être gardées hors ligne. Synchronisez et libérez de la place.','bad')});
+if(KV.failed())toast('Mémoire de l’appareil pleine ou bloquée.','bad');
 Sync.init();
 if(!SYNC_ON)mergeDuplicates();
 (function(){var se=S.session,u=se&&userById(se.uid);if(u&&(!SYNC_ON||Sync.hasAuth(se.uid))){U.lpdv=se.pdvId;startSession(u,true)}else S.session=null})();
 render();
 Sync.start();
-})();
+});
 </script>
