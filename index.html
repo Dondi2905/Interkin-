@@ -284,7 +284,7 @@ window.__KVBOOT(function(){
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v70',APP_BUILD=39;
+var APP_VER='v71',APP_BUILD=39;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -771,7 +771,7 @@ function pinSubmit(){
 
 /* ---------- validation de la facture par le vendeur (code) et mode client ---------- */
 var V=null;
-function codeOk(code){var u=U.user;return SYNC_ON?Sync.chk(code):hashPw(code,u.id)===u.pw}
+function codeOk(code){var u=U.user;if(!SYNC_ON)return Promise.resolve(hashPw(code,u.id)===u.pw);if(Sync.chk(code))return Promise.resolve(true);return Sync.verifyOnline(code)}
 function vCalcHTML(c){
   var h='<div class="l"><span class="muted">Total</span><span>'+fmt(c.total)+' FC</span></div>';
   if(c.pu>0)h+='<div class="l"><span class="muted">Payé avec des points</span><span class="pts">− '+fmt(c.pu)+' FC</span></div>';
@@ -783,7 +783,7 @@ function vCalcHTML(c){
   if(c.availErr)h+='<div class="note bad" style="margin-top:8px">'+esc(c.availErr)+'</div>';
   return h;
 }
-function vDots(){var d=$('#vdots');if(d&&V){var h='';for(var i=0;i<Math.max(6,V.digits.length);i++)h+='<i class="'+(i<V.digits.length?'f':'')+'"></i>';d.innerHTML=h}}
+function vDots(){var d=$('#vdots');if(d&&V){var h='';for(var i=0;i<V.digits.length;i++)h+='<i class="'+(i<V.digits.length?'f':'')+'"></i>';d.innerHTML=h}}
 function vMsg(m){var e=$('#vmsg');if(e)e.textContent=m||''}
 function vOpen(mode){
   if(Date.now()<(U.vlock||0)){toast('Validation bloquée : réessayez dans '+Math.ceil((U.vlock-Date.now())/1000)+' s.','bad');return}
@@ -794,7 +794,7 @@ function vOpen(mode){
     h+='<h3>'+esc(c.cust?c.cust.name:'Client sans compte')+'</h3><div class="calc" id="vcalc">'+vCalcHTML(c)+'</div>'
      +(c.change>=100?'<label class="lbl" for="vav" style="text-align:left">Monnaie disponible en caisse (FC)</label><input id="vav" class="inp" inputmode="numeric" data-i="vav" autocomplete="off" placeholder="Laisser vide si toute la monnaie est disponible">':'');
   }else h+='<h3>Quitter le mode client</h3><div class="muted small">Le vendeur tape son code.</div>';
-  if(num)h+='<div class="dots" id="vdots"></div>';
+  if(num)h+='<div class="dots" id="vdots" style="min-height:20px"></div>';
   else h+='<div class="note" style="margin-top:12px;text-align:left">Votre code contient des lettres : demandez au propriétaire de le remplacer par un code de 4 à 6 chiffres.</div><input id="vcode" type="password" class="inp" style="margin-top:10px" autocomplete="off" placeholder="Code vendeur">';
   h+='<div class="pin-msg" id="vmsg" role="alert"></div>';
   if(num){var k='';['1','2','3','4','5','6','7','8','9'].forEach(function(n){k+='<button data-a="vk" data-v="'+n+'" aria-label="'+n+'">'+n+'</button>'});
@@ -806,14 +806,18 @@ function vOpen(mode){
 }
 function vClose(){V=null;var el=$('#vv');el.hidden=true;el.innerHTML=''}
 function vOk(){
-  if(!V)return;var code=V.num?V.digits:(($('#vcode')||{}).value||'');
+  if(!V||V.busy)return;var code=V.num?V.digits:(($('#vcode')||{}).value||'');
   if(!code){vMsg('Tapez votre code.');return}
   if(V.mode==='bill'){var c=calc();if(c.err){vMsg(c.err);return}if(c.availErr){vMsg(c.availErr);return}}
-  if(!codeOk(code)){V.tries++;V.digits='';
-    if(V.tries>=3){vClose();U.vlock=Date.now()+60000;toast('Trop d’essais : validation bloquée 1 minute.','bad');return}
-    vMsg('Code incorrect. '+(3-V.tries)+' essai(s) restant(s).');vDots();var ci=$('#vcode');if(ci)ci.value='';return}
-  var m=V.mode;vClose();
-  if(m==='bill')finalizeSale();else{U.kiosk=false;render()}
+  V.busy=true;vMsg('Vérification…');
+  codeOk(code).then(function(ok){
+    if(!V)return;V.busy=false;
+    if(!ok){V.tries++;V.digits='';
+      if(V.tries>=3){vClose();U.vlock=Date.now()+60000;toast('Trop d’essais : validation bloquée 1 minute.','bad');return}
+      vMsg('Code incorrect. '+(3-V.tries)+' essai(s) restant(s).');vDots();var ci=$('#vcode');if(ci)ci.value='';return}
+    var m=V.mode;vClose();
+    if(m==='bill')finalizeSale();else{U.kiosk=false;render()}
+  });
 }
 function vRefuse(){vClose();U.avail='';U.refuse='Facture non validée par le vendeur. Vérifiez le montant en espèces, puis appuyez de nouveau sur « Facturer ».';render();window.scrollTo(0,0)}
 function vCancel(){vClose();resetSale();render()}
@@ -2504,7 +2508,10 @@ var Sync=(function(){
       +'<div class="item"><div class="grow muted">Ventes en attente d’envoi</div><b class="num">'+n+'</b></div>'
       +(rj.length?'<div class="note bad" style="margin-top:8px"><b>'+rj.length+' élément(s) refusé(s) par le serveur</b><div class="small">'+esc(rj[0].k+' : '+rj[0].msg)+'</div></div>':'');
   }
-  var api={ST:function(){return ST},chk:function(code){var c=ST.auth&&ST.creds[ST.auth.phone];return !!c&&c.h===hashPw(code,'dev')},codeNum:function(){var c=ST.auth&&ST.creds[ST.auth.phone];return !c||c.num!==false},persist:function(){writeSt()},setPin:setPin,requestUnlock:requestUnlock,login:login,logout:logout,first:first,kick:kick,start:start,init:init,settle:settle,rpc:rpc,profiles:profiles,msg:msg,
+  var api={ST:function(){return ST},verifyOnline:function(code){
+      var a=ST.auth;if(!a||a.offline||!U.online||!a.phone)return Promise.resolve(false);
+      return http('POST','/auth/v1/token?grant_type=password',{email:a.phone+'@interkin.app',password:code},null,true).then(function(j){
+        if(!j||!j.access_token)return false;var c=ST.creds[a.phone];if(c){c.h=hashPw(code,'dev');c.num=/^\d{4,12}$/.test(code);writeSt()}return true},function(){return false})},chk:function(code){var c=ST.auth&&ST.creds[ST.auth.phone];return !!c&&c.h===hashPw(code,'dev')},codeNum:function(){var c=ST.auth&&ST.creds[ST.auth.phone];return !c||c.num!==false},persist:function(){writeSt()},setPin:setPin,requestUnlock:requestUnlock,login:login,logout:logout,first:first,kick:kick,start:start,init:init,settle:settle,rpc:rpc,profiles:profiles,msg:msg,
     pend:pendCount,statusHTML:statusHTML,cycle:function(){return cycle()},stockDirty:false,started:false,
     renamePhone:function(o,n){if(ST.creds[o]){ST.creds[n]=ST.creds[o];delete ST.creds[o]}if(ST.auth&&ST.auth.phone===o)ST.auth.phone=n;writeSt()},
     dirtyStock:function(){api.stockDirty=true;kick(400)},
