@@ -154,6 +154,11 @@ h1,h2,h3{font-family:var(--font-head);margin:0;text-wrap:balance}
 .sheet{position:absolute;left:0;right:0;bottom:0;margin:0 auto;max-width:560px;max-height:92%;overflow:auto;background:var(--surface);border-radius:16px 16px 0 0;
   padding:18px max(16px,env(safe-area-inset-left,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-right,0px));box-shadow:var(--shadow)}
 .sheet h3{font-size:20px;margin-bottom:12px}
+#vv{position:fixed;top:0;left:0;right:0;bottom:0;z-index:61;background:var(--bg);overflow:auto;padding:16px}
+#vv .pin-card{margin:0 auto}
+#vv .calc{text-align:left;margin-top:12px}
+#vv .keys button{min-height:56px}
+#vv .dots{margin:14px 0 4px}
 #pin{position:fixed;top:0;left:0;right:0;bottom:0;z-index:60;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px}
 .pin-card{width:100%;max-width:360px;text-align:center}
 .pin-tag{display:inline-block;font:600 11px/1 var(--font-body);letter-spacing:.1em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);padding:6px 10px;border-radius:5px}
@@ -199,6 +204,7 @@ svg.map{background:var(--surface-2);border-radius:8px;border:1px solid var(--lin
 <div id="dock" class="dock" hidden><div class="dock-in"><div id="actionBar"></div><nav id="nav" class="nav" aria-label="Navigation"></nav></div></div>
 <div id="modal" hidden></div><div id="printArea" aria-hidden="true"></div>
 <div id="pin" hidden></div>
+<div id="vv" hidden></div>
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -278,7 +284,7 @@ window.__KVBOOT(function(){
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v67',APP_BUILD=39;
+var APP_VER='v68',APP_BUILD=39;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -516,12 +522,17 @@ function calc(){
   var due=total-pu,paid=r2(parseFloat(String(U.cash).replace(',','.'))||0),change=Math.max(0,paid-due);
   var buyer=0,p1=0,p2=0,keep=0;
   if(cust&&pu===0)U.cart.forEach(function(i){buyer+=i.qty*i.b;p1+=i.qty*i.p1;p2+=i.qty*i.p2});
-  if(cust&&U.keep&&change>0)keep=change;
+  var ret=0,rest=0,availErr='';
+  if(change>0){
+    var maxRet=Math.floor(change/100+1e-9)*100,av=(U.avail===''||U.avail==null)?Infinity:Math.max(0,parseFloat(String(U.avail).replace(',','.'))||0),avR=av===Infinity?maxRet:Math.floor(av/100+1e-9)*100;
+    if(cust){if(U.keep)keep=change;else{ret=Math.min(maxRet,avR);keep=r2(change-ret)}}
+    else{ret=maxRet;rest=r2(change-maxRet);if(avR<maxRet)availErr='Client sans compte : il faut rendre toute la monnaie ('+fmt(maxRet)+' FC).'}
+  }
   var s1=cust?sponsorOf(cust):null,s2=s1?sponsorOf(s1):null,err='';
   if(!U.cart.length)err='Le panier est vide.';
   else if(U.client===undefined)err='Choisissez un client ou « Sans compte ».';
   else if(paid<due)err='Il manque '+fmt(due-paid)+' FC.';
-  return {cust:cust,total:total,bal:bal,pu:pu,due:due,paid:paid,change:change,keep:keep,buyer:buyer,p1:p1,p2:p2,s1:s1,s2:s2,err:err,earned:buyer+keep};
+  return {cust:cust,total:total,bal:bal,pu:pu,due:due,paid:paid,change:change,keep:keep,ret:ret,rest:rest,availErr:availErr,buyer:buyer,p1:p1,p2:p2,s1:s1,s2:s2,err:err,earned:buyer+keep};
 }
 
 var liveChk=false;
@@ -554,8 +565,8 @@ function doFinalize(res){
   U.cart.forEach(function(i){cogs+=(i.cost||0)*i.qty});
   var sale={id:res?res.sid:'s'+nid(),no:no,ts:Date.now(),pdvId:pdv,role:user.role,sellerId:user.id,sellerName:whoName(user),custId:cust?cust.id:null,custName:cust?cust.name:null,
     items:U.cart.map(function(i,ix){return {id:i.id,name:i.name,price:i.price,qty:i.qty,cost:i.cost||0,use:UU[ix]}}),
-    total:c.total,pointsUsed:c.pu,cashDue:c.due,cashPaid:c.paid,change:c.change,kept:c.keep,
-    cashNet:c.paid-(c.change-c.keep),earned:0,balanceAfter:null,cogs:cogs,profit:c.total-cogs,offline:!U.online,pending:!U.online};
+    total:c.total,pointsUsed:c.pu,cashDue:c.due,cashPaid:c.paid,change:c.change,kept:c.keep,ret:c.ret,
+    cashNet:c.paid-c.ret,earned:0,balanceAfter:null,cogs:cogs,profit:c.total-cogs,offline:!U.online,pending:!U.online};
   if(cust){
     var tk=' — ticket N° '+pad(no);
     if(c.pu>0){addLedger(cust.id,'spend',-c.pu,'Points utilisés'+tk,sale.id);if(res){var LR=S.ledger[S.ledger.length-1];LR.id=res.lid;LR.ts=res.ts;LR.note=res.note}}
@@ -612,7 +623,7 @@ function saleUses(cart,pdv){
 function stockKeys(items,pdv){var k=[];items.forEach(function(i){k.push('stock/p:'+i.id+':'+pdv);var pr=prodById(i.id),L=((pr&&pr.recipe||[]).concat((pr&&pr.pack)||[])).concat(pr?[]:(i.use||[]).map(function(u){return {ing:u.ing}}));
     (pr&&pr.recipe||[]).forEach(function(r){var g=ingById(r.ing);if(g&&g.pack)L=L.concat(g.pack)});
     L.forEach(function(r){k.push('istock/i:'+r.ing+':'+pdv)})});return k}
-function resetSale(){U.cart=[];U.client=undefined;U.cq='';U.usePoints=false;U.unlocked=false;U.pts='';U.cash='';U.keep=false}
+function resetSale(){U.avail='';U.refuse='';U.cart=[];U.client=undefined;U.cq='';U.usePoints=false;U.unlocked=false;U.pts='';U.cash='';U.keep=false}
 
 function breakdown(id){
   var b={buy:0,sp:0,chg:0,used:0,total:0};
@@ -660,7 +671,7 @@ function ticketLines(s){
   L.push(rule,lr('TOTAL',fmt(s.total)+' FC'));
   if(s.pointsUsed>0){L.push(lr('Paye en points',' -'+fmt(s.pointsUsed)+' FC'),lr('A payer',fmt(s.cashDue)+' FC'))}
   if(s.cashDue>0){L.push(lr('Espèces reçues',fmt(s.cashPaid)+' FC'));
-    if(s.change-s.kept>0)L.push(lr('Monnaie rendue',fmt(s.change-s.kept)+' FC'));
+    var rt=s.ret!=null?s.ret:s.change-s.kept;if(rt>0)L.push(lr('Monnaie rendue',fmt(rt)+' FC'));
     if(s.kept>0)L.push(lr('Monnaie gardée',fmt(s.kept)+' FC'))}
   L.push(rule);
   if(s.custId){L.push(lr('Points générés',fmt(s.earned)+' pts'));
@@ -716,6 +727,7 @@ function processLogo(file,cb){
 var toastT;
 function toast(msg){var t=$('#toast');t.textContent=msg;t.className='show';clearTimeout(toastT);toastT=setTimeout(function(){t.className=''},2800)}
 var modalAt=0,lastTap=null;
+var printAt=0;
 function openModal(html){modalAt=Date.now();if(window.dbg)dbg('modal ouvert');M={};var m=$('#modal');m.innerHTML='<div class="scrim" data-a="closeModal"></div><div class="sheet" role="dialog" aria-modal="true">'+html+'</div>';m.hidden=false;if(window.dbg){var sh=m.querySelector('.sheet');dbg('taille fond '+m.offsetWidth+'x'+m.offsetHeight+' fiche '+(sh?sh.offsetWidth+'x'+sh.offsetHeight:'-'))}}
 function closeModal(){if(window.dbg)dbg('modal ferme');var m=$('#modal');m.hidden=true;m.innerHTML='';M={}}
 
@@ -755,6 +767,61 @@ function pinSubmit(){
     else{P.step=1;P.first='';P.digits='';P.msg='Les deux codes sont différents. Recommencez.';renderPin()}
   }
 }
+
+/* ---------- validation de la facture par le vendeur (code) et mode client ---------- */
+var V=null;
+function codeOk(code){var u=U.user;return SYNC_ON?Sync.chk(code):hashPw(code,u.id)===u.pw}
+function vCalcHTML(c){
+  var h='<div class="l"><span class="muted">Total</span><span>'+fmt(c.total)+' FC</span></div>';
+  if(c.pu>0)h+='<div class="l"><span class="muted">Payé avec des points</span><span class="pts">− '+fmt(c.pu)+' FC</span></div>';
+  h+='<div class="l t"><span>À payer en espèces</span><span>'+fmt(c.due)+' FC</span></div>'
+    +'<div class="l"><span class="muted">Espèces à recevoir du client</span><b>'+fmt(c.paid)+' FC</b></div>'
+    +'<div class="l"><span class="muted">Monnaie à rendre</span><b>'+fmt(c.ret)+' FC</b></div>';
+  if(c.keep>0)h+='<div class="l"><span class="muted">Monnaie transformée en points</span><span class="pts">'+fmt(c.keep)+' pts</span></div>';
+  if(c.rest>0)h+='<div class="l"><span class="muted">Non rendu (moins de 100 FC)</span><span>'+fmt(c.rest)+' FC</span></div>';
+  if(c.availErr)h+='<div class="note bad" style="margin-top:8px">'+esc(c.availErr)+'</div>';
+  return h;
+}
+function vDots(){var d=$('#vdots');if(d&&V){var h='';for(var i=0;i<Math.max(6,V.digits.length);i++)h+='<i class="'+(i<V.digits.length?'f':'')+'"></i>';d.innerHTML=h}}
+function vMsg(m){var e=$('#vmsg');if(e)e.textContent=m||''}
+function vOpen(mode){
+  if(Date.now()<(U.vlock||0)){toast('Validation bloquée : réessayez dans '+Math.ceil((U.vlock-Date.now())/1000)+' s.','bad');return}
+  var num=SYNC_ON?Sync.codeNum():true;
+  V={mode:mode,digits:'',tries:0,num:num};if(mode==='bill')U.avail='';
+  var el=$('#vv'),h='<div class="pin-card"><span class="pin-tag">Validation vendeur</span>';
+  if(mode==='bill'){var c=calc();
+    h+='<h3>'+esc(c.cust?c.cust.name:'Client sans compte')+'</h3><div class="calc" id="vcalc">'+vCalcHTML(c)+'</div>'
+     +(c.change>=100?'<label class="lbl" for="vav" style="text-align:left">Monnaie disponible en caisse (FC)</label><input id="vav" class="inp" inputmode="numeric" data-i="vav" autocomplete="off" placeholder="Laisser vide si toute la monnaie est disponible">':'');
+  }else h+='<h3>Quitter le mode client</h3><div class="muted small">Le vendeur tape son code.</div>';
+  if(num)h+='<div class="dots" id="vdots"></div>';
+  else h+='<div class="note" style="margin-top:12px;text-align:left">Votre code contient des lettres : demandez au propriétaire de le remplacer par 6 chiffres.</div><input id="vcode" type="password" class="inp" style="margin-top:10px" autocomplete="off" placeholder="Code vendeur">';
+  h+='<div class="pin-msg" id="vmsg" role="alert"></div>';
+  if(num){var k='';['1','2','3','4','5','6','7','8','9'].forEach(function(n){k+='<button data-a="vk" data-v="'+n+'" aria-label="'+n+'">'+n+'</button>'});
+    k+='<button class="fn" data-a="vk" data-v="clr">Effacer</button><button data-a="vk" data-v="0" aria-label="0">0</button><button class="fn" data-a="vk" data-v="del" aria-label="Retour">⌫</button>';
+    h+='<div class="keys">'+k+'</div>'}
+  h+='<div class="row" style="margin-top:14px">'+(mode==='bill'?'<button class="btn grow danger" data-a="vRefuse">Refuser</button>':'<button class="btn grow" data-a="vClose">Annuler</button>')+'<button class="btn primary grow" data-a="vOk">'+(mode==='bill'?'Valider la facture':'Valider')+'</button></div>'
+   +(mode==='bill'?'<button class="btn wide" style="margin-top:10px" data-a="vCancel">Annuler la commande</button>':'')+'</div>';
+  el.innerHTML=h;el.hidden=false;vDots();
+}
+function vClose(){V=null;var el=$('#vv');el.hidden=true;el.innerHTML=''}
+function vOk(){
+  if(!V)return;var code=V.num?V.digits:(($('#vcode')||{}).value||'');
+  if(!code){vMsg('Tapez votre code.');return}
+  if(V.mode==='bill'){var c=calc();if(c.err){vMsg(c.err);return}if(c.availErr){vMsg(c.availErr);return}}
+  if(!codeOk(code)){V.tries++;V.digits='';
+    if(V.tries>=3){vClose();U.vlock=Date.now()+60000;toast('Trop d’essais : validation bloquée 1 minute.','bad');return}
+    vMsg('Code incorrect. '+(3-V.tries)+' essai(s) restant(s).');vDots();var ci=$('#vcode');if(ci)ci.value='';return}
+  var m=V.mode;vClose();
+  if(m==='bill')finalizeSale();else{U.kiosk=false;render()}
+}
+function vRefuse(){vClose();U.avail='';U.refuse='Facture non validée par le vendeur. Vérifiez le montant en espèces, puis appuyez de nouveau sur « Facturer ».';render();window.scrollTo(0,0)}
+function vCancel(){vClose();resetSale();render()}
+function kioskBar(){
+  if(!U.user||U.user.role==='owner')return '';
+  return U.kiosk?'<div class="note pts" style="margin-bottom:12px"><b>Mode client</b> : choisissez vos produits, indiquez votre nom ou numéro, les espèces données, puis appuyez sur « Facturer ». Le vendeur validera avec son code.</div>'
+    :'<button class="btn wide" style="margin-bottom:12px" data-a="kioskOn">Passer en mode client (le client fait sa facture)</button>';
+}
+function refuseBanner(){return U.refuse?'<div class="note bad" style="margin-bottom:12px"><b>Facture non validée par le vendeur.</b><div class="small">Vérifiez le montant en espèces, puis appuyez de nouveau sur « Facturer ».</div></div>':''}
 
 /* ---------- géolocalisation (simulée dans la démo) ---------- */
 function ping(pdvId,who){
@@ -820,9 +887,9 @@ var ICON={
 function viewLogin(){
   var opts=S.pdvs.map(function(p){return '<option value="'+p.id+'"'+((U.lpdv||(S.pdvs[0]&&S.pdvs[0].id))===p.id?' selected':'')+'>'+esc(p.name)+'</option>'}).join('');
   return '<div class="login"><div class="brand">Interkin'+DEMO+'</div><h1>Ouvrir une session</h1>'
-   +'<p class="muted" style="margin:0 0 20px">Entrez votre numéro et votre mot de passe.</p>'
+   +'<p class="muted" style="margin:0 0 20px">Entrez votre numéro et votre code (6 chiffres). Le propriétaire utilise « ABC » pour son mot de passe.</p>'
    +'<div class="card"><label class="lbl" for="lph">Numéro de téléphone</label><input id="lph" class="inp" inputmode="tel" autocomplete="username" placeholder="ex. 0811100001">'
-   +'<label class="lbl" for="lpw">Mot de passe</label>'+pwField('lpw','current-password')+''
+   +'<label class="lbl" for="lpw">Code vendeur</label>'+pwField('lpw','current-password',true)+''
    +(S.pdvs.length?'<label class="lbl" for="lpdv">Point de vente (propriétaire seulement)</label><select id="lpdv" class="sel" data-c="lpdv">'+opts+'</select>':'')
    +'<button class="btn primary big wide" style="margin-top:18px" data-a="login">Ouvrir la session</button></div>'
    +'<button class="btn wide" style="margin-top:12px" data-a="balOpen">Consulter le solde d’un client</button>'
@@ -832,7 +899,7 @@ function topbar(){
   var u=U.user,p=pdvById(u.pdvId);
   return '<header class="top"><div><div class="brand">Interkin'+DEMO+'</div>'
    +'<div class="who"><span>PDV '+esc(p?p.name:'')+' · '+esc(whoName(u))+'</span><span class="live'+(S.geoEnabled?'':' off')+'"><i></i>Position '+(S.geoEnabled?'active (simulée)':'désactivée')+'</span><span id="net">'+netHTML()+'</span></div></div>'
-   +'<button class="btn sm" data-a="logout">Quitter</button></header>';
+   +(U.kiosk?'<button class="btn sm" data-a="kioskOff">Retour vendeur</button>':'<button class="btn sm" data-a="logout">Quitter</button>')+'</header>';
 }
 function navHTML(){
   var t=[['sale','Vente'],['clients','Clients'],['products','Produits'],['stock','Stock'],['reports','Rapports']];
@@ -924,8 +991,10 @@ function calcHTML(c){
   var h='<div class="l"><span class="muted">Total</span><span>'+fmt(c.total)+' FC</span></div>';
   if(c.pu>0)h+='<div class="l"><span class="muted">Payé avec des points</span><span class="pts">− '+fmt(c.pu)+' FC</span></div>';
   h+='<div class="l t"><span>À payer en espèces</span><span>'+fmt(c.due)+' FC</span></div>';
-  if(c.due>0||c.paid>0)h+='<div class="l"><span class="muted">Monnaie à rendre</span><span>'+fmt(c.change)+' FC</span></div>';
-  if(c.cust&&c.change>0)h+='<button class="btn wide'+(U.keep?' on':'')+'" style="margin-top:6px" data-a="keep">'+(U.keep?'Monnaie gardée en points ✓ (annuler)':'Garder '+fmt(c.change)+' FC en points (accord du client)')+'</button>';
+  if(c.due>0||c.paid>0)h+='<div class="l"><span class="muted">Monnaie à rendre</span><span>'+fmt(c.ret)+' FC</span></div>';
+  if(c.cust&&c.change>0&&!U.keep&&c.keep>0)h+='<div class="note pts">La monnaie est rendue par multiples de 100 FC : <b>'+fmt(c.keep)+' FC</b> sont transformés en points.</div>';
+  if(!c.cust&&c.rest>0)h+='<div class="note">Moins de 100 FC de monnaie ne sont pas rendus (client sans compte).</div>';
+  if(c.cust&&c.change>0)h+='<button class="btn wide'+(U.keep?' on':'')+'" style="margin-top:6px" data-a="keep">'+(U.keep?'Toute la monnaie en points ✓ (annuler)':'Transformer toute la monnaie ('+fmt(c.change)+' FC) en points')+'</button>';
   if(c.cust&&U.cart.length){
     if(c.pu>0)h+='<div class="note">Achat avec des points : aucun point d’achat ni de parrainage.'+(c.keep>0?' Seule la monnaie gardée devient des points (<b>'+fmt(c.keep)+' pts</b>).':'')+'</div>';
     else{
@@ -938,10 +1007,10 @@ function calcHTML(c){
 function actionHTML(){
   var c=calc();
   return '<div class="act"><div><div class="tl">À payer</div><div class="amt">'+fmt(c.due)+' FC</div><div class="why">'+esc(c.err||'Prêt à encaisser')+'</div></div>'
-    +'<button class="btn primary big" data-a="checkout"'+(c.err?' disabled':'')+'>Encaisser</button></div>';
+    +'<button class="btn primary big" data-a="checkout"'+(c.err?' disabled':'')+'>Facturer</button></div>';
 }
 function saleView(){
-  return resetBanner()+'<h2 class="h">Produits</h2><input id="pq" type="search" class="inp" style="margin-bottom:10px" data-i="pq" autocomplete="off" enterkeyhint="done" placeholder="Rechercher un produit" aria-label="Rechercher un produit" value="'+esc(U.pq||'')+'"><div id="prodBox" class="pgrid">'+prodHTML()+'</div>'
+  return kioskBar()+refuseBanner()+resetBanner()+'<h2 class="h">Produits</h2><input id="pq" type="search" class="inp" style="margin-bottom:10px" data-i="pq" autocomplete="off" enterkeyhint="done" placeholder="Rechercher un produit" aria-label="Rechercher un produit" value="'+esc(U.pq||'')+'"><div id="prodBox" class="pgrid">'+prodHTML()+'</div>'
    +'<h2 class="h">Panier</h2><div id="cartBox" class="card">'+cartHTML()+'</div>'
    +'<h2 class="h">Client</h2><div id="clientBox" class="card">'+clientHTML()+'</div>'
    +'<h2 class="h">Paiement</h2><div id="payBox" class="card">'+payHTML()+'</div>';
@@ -1433,7 +1502,7 @@ function manageGen(){
 
 
 /* ---------- comptes et caisse ---------- */
-function pwField(id,ac){return '<div class="row"><input id="'+id+'" type="password" class="inp grow" autocomplete="'+(ac||'off')+'"><button type="button" class="btn" data-a="showpw" data-t="'+id+'" aria-label="Afficher ou masquer le mot de passe">Afficher</button></div>'}
+function pwField(id,ac,num){return '<div class="row"><input id="'+id+'" type="password" class="inp grow" autocomplete="'+(ac||'off')+'"'+(num?' inputmode="numeric" pattern="[0-9]*"':'')+'>'+(num?'<button type="button" class="btn" data-a="pwkb" data-t="'+id+'" aria-label="Changer de clavier">ABC</button>':'')+'<button type="button" class="btn" data-a="showpw" data-t="'+id+'" aria-label="Afficher ou masquer le mot de passe">Afficher</button></div>'}
 function whoName(u){return u.role==='owner'?'Propriétaire':u.name}
 function logEv(type,txt){S.log.unshift({ts:Date.now(),uid:U.user?U.user.id:null,name:U.user?whoName(U.user):'Système',pdvId:U.user?U.user.pdvId:null,type:type,txt:txt});if(S.log.length>600)S.log.length=600}
 function userById(id){return S.users.find(function(u){return u.id===id})||null}
@@ -1612,7 +1681,7 @@ function staffView(){
    +'<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap" id="sellerChips">'+chip('all','Tous')+chip('open','Service ouvert')+chip('locked','Verrouillés')+'</div><div id="sellerList">'+sellerListHTML()+'</div>';
   h+='<h2 class="h">Créer un compte vendeur</h2><div class="card"><label class="lbl" for="nsn">Nom</label><input id="nsn" class="inp" maxlength="40">'
    +'<label class="lbl" for="nsp">Numéro de téléphone (identifiant)</label><input id="nsp" class="inp" inputmode="tel">'
-   +'<label class="lbl" for="nspw">Mot de passe (6 caractères minimum)</label>'+pwField('nspw')+''
+   +'<label class="lbl" for="nspw">Code du vendeur (6 chiffres) : sert à ouvrir la session et à valider les factures</label>'+pwField('nspw','off',true)+''
    +pdvSelect('nspd',S.pdvs[0]&&S.pdvs[0].id)+'<label class="lbl" for="nssh">Poste</label><select id="nssh" class="sel"><option value="matin">Matin</option><option value="soir">Soir</option></select>'
    +'<button class="btn primary wide" style="margin-top:14px" data-a="addSeller">Créer le compte</button>'
    +'<div class="hint" style="margin-top:8px">Seul le propriétaire crée, modifie ou supprime les comptes. Le vendeur se connecte avec ce numéro et ce mot de passe.</div></div>';
@@ -1645,13 +1714,14 @@ function tabView(){
 function closeStaleResets(){var ch=false;S.resets.forEach(function(r){if((r.status==='pending'||r.status==='approved')&&S.resets.some(function(x){return x.id!==r.id&&x.custId===r.custId&&x.status==='done'&&(x.doneAt||x.approvedAt||0)>=r.ts})){r.status='done';r.doneAt=Date.now();ch=true}});if(ch)save()}
 function render(){
   var app=$('#app'),dock=$('#dock');
-  if(!U.user){app.innerHTML=viewLogin();dock.hidden=true;return}
+  if(!U.user){U.kiosk=false;app.innerHTML=viewLogin();dock.hidden=true;return}
   if(U.user.role==='owner'){closeStaleResets();if((S.minVer||0)<APP_BUILD){S.minVer=APP_BUILD;save()}}
   if(U.tab==='manage'&&U.user.role!=='owner')U.tab='sale';
   if(U.tab==='cash'&&U.user.role==='owner')U.tab='sale';
+  if(U.kiosk&&U.user.role==='owner')U.kiosk=false;if(U.kiosk)U.tab='sale';
   if(U.user.role!=='owner'&&!openShift(U.user.id)){app.innerHTML='<div class="shell">'+topbar()+'<main class="main">'+openCashView()+'</main></div>';dock.hidden=true;return}
   app.innerHTML='<div class="shell">'+topbar()+'<main class="main">'+outdatedBanner()+tabView()+'</main></div>';
-  dock.hidden=false;$('#nav').innerHTML=navHTML();
+  dock.hidden=false;$('#nav').innerHTML=U.kiosk?'':navHTML();
   $('#actionBar').innerHTML=U.tab==='sale'?actionHTML():'';
   sizeDock();
 }
@@ -1681,7 +1751,12 @@ var A={
     if(!u||u.pw!==hashPw(pw,u.id)){f.n++;if(f.n>=5){f.until=Date.now()+300000;f.n=0}U.fails[ph]=f;toast('Numéro ou mot de passe incorrect.');return}
     U.fails[ph]=null;startSession(u);
   },
-  logout:function(){var u=U.user;if(u&&u.role!=='owner'&&openShift(u.id)){A.closeCash();return}logoutNow()},
+  vk:function(d){if(!V||!V.num)return;var v=d.v;if(v==='clr')V.digits='';else if(v==='del')V.digits=V.digits.slice(0,-1);else if(V.digits.length<12)V.digits+=v;vMsg('');vDots()},
+  vOk:vOk,vRefuse:vRefuse,vCancel:vCancel,vClose:vClose,
+  kioskOn:function(){U.kiosk=true;U.tab='sale';render();window.scrollTo(0,0)},
+  kioskOff:function(){vOpen('kiosk')},
+  logout:function(){if(U.kiosk)return;var u=U.user;if(u&&u.role!=='owner'&&openShift(u.id)){A.closeCash();return}logoutNow()},
+  pwkb:function(d,e){var i=$('#'+d.t);if(!i)return;var num=i.getAttribute('inputmode')==='numeric';i.setAttribute('inputmode',num?'text':'numeric');if(num)i.removeAttribute('pattern');else i.setAttribute('pattern','[0-9]*');e.target.closest('button').textContent=num?'123':'ABC';i.blur();i.focus()},
   showpw:function(d,e){var i=$('#'+d.t);if(!i)return;var show=i.type==='password';i.type=show?'text':'password';e.target.closest('button').textContent=show?'Masquer':'Afficher'},
   mgtab:function(d){U.mg=d.v;render()},
   openCashOk:function(){startShift(suggestedFloat(U.user.pdvId))},
@@ -1705,7 +1780,7 @@ var A={
     var nm=$('#nsn').value.trim(),ph=digits($('#nsp').value),pw=$('#nspw').value,pdv=$('#nspd').value,sh=$('#nssh').value;
     if(!nm){toast('Saisissez le nom du vendeur.');return}
     if(ph.length<9){toast('Numéro de téléphone trop court.');return}
-    if(pw.length<6){toast('Mot de passe : 6 caractères minimum.');return}
+    if(!/^\d{6}$/.test(pw)){toast('Le code du vendeur doit contenir exactement 6 chiffres.');return}
     if(S.users.some(function(x){return x.phone===ph})){toast('Ce numéro a déjà un compte.');return}
     if(SYNC_ON){Sync.rpc('create_seller',{p_phone:ph,p_password:pw,p_name:nm,p_shift:sh,p_pdv:pdv}).then(function(){logEv('seller_new','Compte vendeur créé : '+nm+' ('+ph+')');save();return Sync.profiles()}).then(function(){render();toast('Compte créé.')}).catch(function(er){toast(Sync.msg(er),'bad')});return}
     var id='u'+nid();S.users.push({id:id,name:nm,phone:ph,pw:hashPw(pw,id),role:'seller',shift:sh,pdvId:pdv});
@@ -1784,8 +1859,8 @@ var A={
   copyLink:function(){var i=$('clink');if(!i)return;var ok=function(){toast('Lien copié.')};
     try{navigator.clipboard.writeText(i.value).then(ok,function(){i.select();document.execCommand('copy');ok()})}catch(e){i.select();try{document.execCommand('copy')}catch(e2){}ok()}},
   syncNow:function(){if(!SYNC_ON)return;toast('Synchronisation…');Sync.cycle().then(function(){render()})},
-  pwSeller:function(d){var u=userById(d.id);if(!u)return;openModal('<h3>Nouveau mot de passe</h3><p class="muted" style="margin:0 0 10px">'+esc(u.role==='owner'?'Compte propriétaire':u.name)+'</p><label class="lbl" for="npw">Mot de passe (6 caractères minimum)</label>'+pwField('npw')+'<div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="pwDo" data-id="'+u.id+'">Enregistrer</button></div>')},
-  pwDo:function(d){var u=userById(d.id),pw=$('#npw').value;if(!u)return;if(pw.length<6){toast('6 caractères minimum.');return}
+  pwSeller:function(d){var u=userById(d.id);if(!u)return;openModal('<h3>Nouveau mot de passe</h3><p class="muted" style="margin:0 0 10px">'+esc(u.role==='owner'?'Compte propriétaire':u.name)+'</p><label class="lbl" for="npw">'+(u.role==='owner'?'Mot de passe (6 caractères minimum)':'Nouveau code (6 chiffres)')+'</label>'+pwField('npw','off',u.role!=='owner')+'<div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="pwDo" data-id="'+u.id+'">Enregistrer</button></div>')},
+  pwDo:function(d){var u=userById(d.id),pw=$('#npw').value;if(!u)return;if(u.role!=='owner'&&!/^\d{6}$/.test(pw)){toast('Le code doit contenir exactement 6 chiffres.');return}if(pw.length<6){toast('6 caractères minimum.');return}
     if(SYNC_ON){Sync.rpc('set_password',{p_id:u.id,p_password:pw}).then(function(){logEv('seller_pw','Mot de passe changé : '+u.name);save();closeModal();toast('Mot de passe modifié.')}).catch(function(er){toast(Sync.msg(er),'bad')});return}
     u.pw=hashPw(pw,u.id);logEv('seller_pw','Mot de passe changé : '+u.name);save();closeModal();toast('Mot de passe modifié.')},
   delPdv:function(d,e){var pd=pdvById(d.id),btn=e.target.closest('button');if(!pd)return;
@@ -1807,7 +1882,7 @@ var A={
     logEv('cancel','Ticket N° '+pad(s0.no)+' annulé ('+fmt(s0.total)+' FC) : '+why);save();render();showTicket(s0,false);toast('Vente annulée.')},
   sdetail:function(d){var sl=sellerList().find(function(x){return x.id===d.id});profitDetail(inPeriod(live(S.sales),U.rper).filter(function(x){return x.sellerId===d.id}),(sl?sl.name:'Vendeur')+' — '+PERLAB[U.rper],true,d.id)},
   pvdetail:function(d){var pd=pdvById(d.id);profitDetail(inPeriod(live(S.sales),U.rper).filter(function(x){return x.pdvId===d.id}),'PDV '+(pd?pd.name:'?')+' — '+PERLAB[U.rper],true)},
-  tab:function(d){U.tab=d.v;render();window.scrollTo(0,0)},
+  tab:function(d){if(U.kiosk)return;U.tab=d.v;render();window.scrollTo(0,0)},
   closeModal:closeModal,
   addp:function(d){var p=prodById(d.id);if(!p||!canAdd(d.id))return;
     var it=U.cart.find(function(i){return i.id===d.id});if(it)it.qty++;else U.cart.push({id:p.id,name:p.name,price:p.price,cost:p.cost||0,qty:1,b:p.b,p1:p.p1,p2:p.p2});refreshSale()},
@@ -1827,7 +1902,7 @@ var A={
   },
   quick:function(d){U.cash=d.v==='exact'?String(calc().due):String(d.v);refreshPay()},
   keep:function(){U.keep=!U.keep;refreshCalc()},
-  checkout:finalizeSale,
+  checkout:function(){var c=calc();if(c.err){toast(c.err,'bad');return}if(U.user.role!=='owner'){U.refuse='';vOpen('bill')}else finalizeSale()},
   pk:function(d){pinKey(d.v)},
   /* clients */
   newClient:function(d){openModal(registerHTML(d.name||''))},
@@ -2034,7 +2109,10 @@ var A={
       toast('Image non prise en charge ici : le ticket est envoyé en texte.');
       window.open(url,'_blank')},'image/png')});
   },
-  printTicket:function(){try{var pa=$('#printArea'),pp=$('#modal .paper');if(!pp)return;pa.innerHTML='';pa.appendChild(pp.cloneNode(true));window.print();setTimeout(function(){pa.innerHTML=''},1500)}catch(e){toast('Impression indisponible ici : ouvrez l’application depuis son adresse web, dans Chrome.')}},
+  printTicket:function(){try{var pa=$('#printArea'),pp=$('#modal .paper');if(!pp)return;pa.innerHTML='';pa.appendChild(pp.cloneNode(true));printAt=Date.now();
+    var im=[].slice.call(pa.querySelectorAll('img')),rd=Promise.all(im.map(function(x){return x.decode?x.decode().catch(function(){}):Promise.resolve()}));
+    /* on attend que le logo soit prêt et que la page soit dessinée avant d'ouvrir l'aperçu ; le ticket n'est PAS effacé ensuite (l'aperçu peut se régénérer plus tard) */
+    rd.then(function(){requestAnimationFrame(function(){requestAnimationFrame(function(){setTimeout(function(){try{window.print()}catch(e){toast('Impression indisponible ici : ouvrez l’application depuis son adresse web, dans Chrome.')}},150)})})})}catch(e){toast('Impression indisponible ici : ouvrez l’application depuis son adresse web, dans Chrome.')}},
   /* gestion */
   geoToggle:function(){S.geoEnabled=!S.geoEnabled;save();render()},
   pingAll:function(){S.pdvs.forEach(function(p){ping(p.id,'matin')});toast('Positions simulées envoyées.');render()},
@@ -2083,6 +2161,7 @@ var I={
   dn:function(t){var v=decIn(t.value);if(v!==t.value)t.value=v},
   lot:function(t){var v=digits(t.value);if(v!==t.value)t.value=v;M.batch=v;M.recipe.forEach(function(r,i){var el=$('#rm'+i);if(el)el.textContent=rowHint(r)})}
 };
+I.vav=function(el){U.avail=el.value;var e=$('#vcalc');if(e)e.innerHTML=vCalcHTML(calc())};
 document.addEventListener('input',function(e){var k=e.target.dataset&&e.target.dataset.i;if(k&&I[k])I[k](e.target)});
 document.addEventListener('change',function(e){
   var k=e.target.dataset&&e.target.dataset.c;
@@ -2227,7 +2306,7 @@ var Sync=(function(){
       if(p.role==='seller')return call('POST','/rest/v1/rpc/claim_session',{}).then(function(e){ST.auth.epoch=e;return p});
       ST.auth.epoch=p.epoch;return p;
     }).then(function(p){
-      ST.creds[phone]={h:hashPw(pw,'dev'),uid:ST.auth.uid,rt:ST.auth.rt,epoch:ST.auth.epoch,profile:p};writeSt();
+      ST.creds[phone]={h:hashPw(pw,'dev'),num:/^\d{4,12}$/.test(pw),uid:ST.auth.uid,rt:ST.auth.rt,epoch:ST.auth.epoch,profile:p};writeSt();
       return {user:toUser(p),online:true};
     },function(e){
       if(e.locked)throw e;
@@ -2356,7 +2435,7 @@ var Sync=(function(){
   }
 
   /* ----- cycle ----- */
-  function idle(){var ae=document.activeElement;return !(ae&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))&&$('#modal').hidden&&!P}
+  function idle(){var ae=document.activeElement;return !(ae&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))&&$('#modal').hidden&&!P&&!V}
   function run(){
     var fresh=!ST.cur[ST.auth.uid],chg=false,seller=ST.auth.profile.role==='seller';
     return ensureTok().then(checkProfile).then(function(){return fresh?pull():push()}).then(function(c){chg=c;return fresh?push():pull()}).then(function(c){chg=chg||c===true;return flushPins()})
@@ -2416,7 +2495,7 @@ var Sync=(function(){
       +'<div class="item"><div class="grow muted">Ventes en attente d’envoi</div><b class="num">'+n+'</b></div>'
       +(rj.length?'<div class="note bad" style="margin-top:8px"><b>'+rj.length+' élément(s) refusé(s) par le serveur</b><div class="small">'+esc(rj[0].k+' : '+rj[0].msg)+'</div></div>':'');
   }
-  var api={ST:function(){return ST},persist:function(){writeSt()},setPin:setPin,requestUnlock:requestUnlock,login:login,logout:logout,first:first,kick:kick,start:start,init:init,settle:settle,rpc:rpc,profiles:profiles,msg:msg,
+  var api={ST:function(){return ST},chk:function(code){var c=ST.auth&&ST.creds[ST.auth.phone];return !!c&&c.h===hashPw(code,'dev')},codeNum:function(){var c=ST.auth&&ST.creds[ST.auth.phone];return !c||c.num!==false},persist:function(){writeSt()},setPin:setPin,requestUnlock:requestUnlock,login:login,logout:logout,first:first,kick:kick,start:start,init:init,settle:settle,rpc:rpc,profiles:profiles,msg:msg,
     pend:pendCount,statusHTML:statusHTML,cycle:function(){return cycle()},stockDirty:false,started:false,
     renamePhone:function(o,n){if(ST.creds[o]){ST.creds[n]=ST.creds[o];delete ST.creds[o]}if(ST.auth&&ST.auth.phone===o)ST.auth.phone=n;writeSt()},
     dirtyStock:function(){api.stockDirty=true;kick(400)},
