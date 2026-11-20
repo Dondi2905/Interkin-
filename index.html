@@ -284,7 +284,7 @@ window.__KVBOOT(function(){
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v69',APP_BUILD=39;
+var APP_VER='v70',APP_BUILD=39;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -795,7 +795,7 @@ function vOpen(mode){
      +(c.change>=100?'<label class="lbl" for="vav" style="text-align:left">Monnaie disponible en caisse (FC)</label><input id="vav" class="inp" inputmode="numeric" data-i="vav" autocomplete="off" placeholder="Laisser vide si toute la monnaie est disponible">':'');
   }else h+='<h3>Quitter le mode client</h3><div class="muted small">Le vendeur tape son code.</div>';
   if(num)h+='<div class="dots" id="vdots"></div>';
-  else h+='<div class="note" style="margin-top:12px;text-align:left">Votre code contient des lettres : demandez au propriétaire de le remplacer par 6 chiffres.</div><input id="vcode" type="password" class="inp" style="margin-top:10px" autocomplete="off" placeholder="Code vendeur">';
+  else h+='<div class="note" style="margin-top:12px;text-align:left">Votre code contient des lettres : demandez au propriétaire de le remplacer par un code de 4 à 6 chiffres.</div><input id="vcode" type="password" class="inp" style="margin-top:10px" autocomplete="off" placeholder="Code vendeur">';
   h+='<div class="pin-msg" id="vmsg" role="alert"></div>';
   if(num){var k='';['1','2','3','4','5','6','7','8','9'].forEach(function(n){k+='<button data-a="vk" data-v="'+n+'" aria-label="'+n+'">'+n+'</button>'});
     k+='<button class="fn" data-a="vk" data-v="clr">Effacer</button><button data-a="vk" data-v="0" aria-label="0">0</button><button class="fn" data-a="vk" data-v="del" aria-label="Retour">⌫</button>';
@@ -895,7 +895,7 @@ var ICON={
 function viewLogin(){
   var opts=S.pdvs.map(function(p){return '<option value="'+p.id+'"'+((U.lpdv||(S.pdvs[0]&&S.pdvs[0].id))===p.id?' selected':'')+'>'+esc(p.name)+'</option>'}).join('');
   return '<div class="login"><div class="brand">Interkin'+DEMO+'</div><h1>Ouvrir une session</h1>'
-   +'<p class="muted" style="margin:0 0 20px">Entrez votre numéro et votre code (6 chiffres). Le propriétaire utilise « ABC » pour son mot de passe.</p>'
+   +'<p class="muted" style="margin:0 0 20px">Entrez votre numéro et votre code (4 à 6 chiffres). Le propriétaire utilise « ABC » pour son mot de passe.</p>'
    +'<div class="card"><label class="lbl" for="lph">Numéro de téléphone</label><input id="lph" class="inp" inputmode="tel" autocomplete="username" placeholder="ex. 0811100001">'
    +'<label class="lbl" for="lpw">Code vendeur</label>'+pwField('lpw','current-password',true)+''
    +(S.pdvs.length?'<label class="lbl" for="lpdv">Point de vente (propriétaire seulement)</label><select id="lpdv" class="sel" data-c="lpdv">'+opts+'</select>':'')
@@ -1689,7 +1689,7 @@ function staffView(){
    +'<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap" id="sellerChips">'+chip('all','Tous')+chip('open','Service ouvert')+chip('locked','Verrouillés')+'</div><div id="sellerList">'+sellerListHTML()+'</div>';
   h+='<h2 class="h">Créer un compte vendeur</h2><div class="card"><label class="lbl" for="nsn">Nom</label><input id="nsn" class="inp" maxlength="40">'
    +'<label class="lbl" for="nsp">Numéro de téléphone (identifiant)</label><input id="nsp" class="inp" inputmode="tel">'
-   +'<label class="lbl" for="nspw">Code du vendeur (6 chiffres) : sert à ouvrir la session et à valider les factures</label>'+pwField('nspw','off',true)+''
+   +'<label class="lbl" for="nspw">Code du vendeur (4 à 6 chiffres) : sert à ouvrir la session et à valider les factures</label>'+pwField('nspw','off',true)+''
    +pdvSelect('nspd',S.pdvs[0]&&S.pdvs[0].id)+'<label class="lbl" for="nssh">Poste</label><select id="nssh" class="sel"><option value="matin">Matin</option><option value="soir">Soir</option></select>'
    +'<button class="btn primary wide" style="margin-top:14px" data-a="addSeller">Créer le compte</button>'
    +'<div class="hint" style="margin-top:8px">Seul le propriétaire crée, modifie ou supprime les comptes. Le vendeur se connecte avec ce numéro et ce mot de passe.</div></div>';
@@ -1789,7 +1789,7 @@ var A={
     var nm=$('#nsn').value.trim(),ph=digits($('#nsp').value),pw=$('#nspw').value,pdv=$('#nspd').value,sh=$('#nssh').value;
     if(!nm){toast('Saisissez le nom du vendeur.');return}
     if(ph.length<9){toast('Numéro de téléphone trop court.');return}
-    if(!/^\d{6}$/.test(pw)){toast('Le code du vendeur doit contenir exactement 6 chiffres.');return}
+    if(!/^\d{4,6}$/.test(pw)){toast('Le code du vendeur doit contenir de 4 à 6 chiffres.');return}
     if(S.users.some(function(x){return x.phone===ph})){toast('Ce numéro a déjà un compte.');return}
     if(SYNC_ON){Sync.rpc('create_seller',{p_phone:ph,p_password:pw,p_name:nm,p_shift:sh,p_pdv:pdv}).then(function(){logEv('seller_new','Compte vendeur créé : '+nm+' ('+ph+')');save();return Sync.profiles()}).then(function(){render();toast('Compte créé.')}).catch(function(er){toast(Sync.msg(er),'bad')});return}
     var id='u'+nid();S.users.push({id:id,name:nm,phone:ph,pw:hashPw(pw,id),role:'seller',shift:sh,pdvId:pdv});
@@ -1868,8 +1868,8 @@ var A={
   copyLink:function(){var i=$('clink');if(!i)return;var ok=function(){toast('Lien copié.')};
     try{navigator.clipboard.writeText(i.value).then(ok,function(){i.select();document.execCommand('copy');ok()})}catch(e){i.select();try{document.execCommand('copy')}catch(e2){}ok()}},
   syncNow:function(){if(!SYNC_ON)return;toast('Synchronisation…');Sync.cycle().then(function(){render()})},
-  pwSeller:function(d){var u=userById(d.id);if(!u)return;openModal('<h3>Nouveau mot de passe</h3><p class="muted" style="margin:0 0 10px">'+esc(u.role==='owner'?'Compte propriétaire':u.name)+'</p><label class="lbl" for="npw">'+(u.role==='owner'?'Mot de passe (6 caractères minimum)':'Nouveau code (6 chiffres)')+'</label>'+pwField('npw','off',u.role!=='owner')+'<div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="pwDo" data-id="'+u.id+'">Enregistrer</button></div>')},
-  pwDo:function(d){var u=userById(d.id),pw=$('#npw').value;if(!u)return;if(u.role!=='owner'&&!/^\d{6}$/.test(pw)){toast('Le code doit contenir exactement 6 chiffres.');return}if(pw.length<6){toast('6 caractères minimum.');return}
+  pwSeller:function(d){var u=userById(d.id);if(!u)return;openModal('<h3>Nouveau mot de passe</h3><p class="muted" style="margin:0 0 10px">'+esc(u.role==='owner'?'Compte propriétaire':u.name)+'</p><label class="lbl" for="npw">'+(u.role==='owner'?'Mot de passe (6 caractères minimum)':'Nouveau code (4 à 6 chiffres)')+'</label>'+pwField('npw','off',u.role!=='owner')+'<div class="row" style="margin-top:14px"><button class="btn grow" data-a="closeModal">Annuler</button><button class="btn primary grow" data-a="pwDo" data-id="'+u.id+'">Enregistrer</button></div>')},
+  pwDo:function(d){var u=userById(d.id),pw=$('#npw').value;if(!u)return;if(u.role!=='owner'){if(!/^\d{4,6}$/.test(pw)){toast('Le code doit contenir de 4 à 6 chiffres.');return}}else if(pw.length<6){toast('6 caractères minimum.');return}
     if(SYNC_ON){Sync.rpc('set_password',{p_id:u.id,p_password:pw}).then(function(){logEv('seller_pw','Mot de passe changé : '+u.name);save();closeModal();toast('Mot de passe modifié.')}).catch(function(er){toast(Sync.msg(er),'bad')});return}
     u.pw=hashPw(pw,u.id);logEv('seller_pw','Mot de passe changé : '+u.name);save();closeModal();toast('Mot de passe modifié.')},
   delPdv:function(d,e){var pd=pdvById(d.id),btn=e.target.closest('button');if(!pd)return;
