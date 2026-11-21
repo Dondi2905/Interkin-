@@ -154,11 +154,24 @@ h1,h2,h3{font-family:var(--font-head);margin:0;text-wrap:balance}
 .sheet{position:absolute;left:0;right:0;bottom:0;margin:0 auto;max-width:560px;max-height:92%;overflow:auto;background:var(--surface);border-radius:16px 16px 0 0;
   padding:18px max(16px,env(safe-area-inset-left,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-right,0px));box-shadow:var(--shadow)}
 .sheet h3{font-size:20px;margin-bottom:12px}
-#vv{position:fixed;top:0;left:0;right:0;bottom:0;z-index:61;background:var(--bg);overflow:auto;padding:16px}
-#vv .pin-card{margin:0 auto}
-#vv .calc{text-align:left;margin-top:12px}
-#vv .keys button{min-height:56px}
-#vv .dots{margin:14px 0 4px}
+#vv{position:fixed;top:0;left:0;right:0;bottom:0;z-index:61;background:var(--bg);overflow:auto;padding:6px 12px calc(6px + env(safe-area-inset-bottom))}
+#vv .pin-card{display:flex;flex-direction:column;gap:4px;height:100%;max-width:420px;margin:0 auto}
+#vv .pin-tag{align-self:center;padding:3px 8px;font-size:10px}
+#vv h3{margin:0;font-size:17px;line-height:1.2;text-align:center}
+#vv .calc{margin:0;padding:5px 8px;gap:1px;font-size:13px;text-align:left}
+#vv .calc .l.t{font-size:14px}
+#vv .calc .note{margin:3px 0 0;padding:4px 8px;font-size:12px}
+#vv .lbl{margin:0;font-size:12px;text-align:left}
+#vv .inp{min-height:36px;padding:4px 10px;font-size:15px}
+#vv .dots{margin:0;min-height:14px;gap:10px}
+#vv .dots i{width:12px;height:12px}
+#vv .pin-msg{min-height:16px;margin:0;font-size:12px}
+#vv .keys{flex:1 1 auto;min-height:128px;margin:0;gap:5px;grid-template-rows:repeat(4,minmax(0,1fr))}
+#vv .keys button{min-height:0;height:100%;padding:0;font-size:22px}
+#vv .keys button.fn{font-size:13px}
+#vv .row{margin:0!important}
+#vv .btn{min-height:40px}
+#vv .btn.wide{margin:0!important;min-height:34px}
 #pin{position:fixed;top:0;left:0;right:0;bottom:0;z-index:60;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px}
 .pin-card{width:100%;max-width:360px;text-align:center}
 .pin-tag{display:inline-block;font:600 11px/1 var(--font-body);letter-spacing:.1em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);padding:6px 10px;border-radius:5px}
@@ -284,7 +297,7 @@ window.__KVBOOT(function(){
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v71',APP_BUILD=39;
+var APP_VER='v72',APP_BUILD=39;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -793,15 +806,15 @@ function vOpen(mode){
   if(mode==='bill'){var c=calc();
     h+='<h3>'+esc(c.cust?c.cust.name:'Client sans compte')+'</h3><div class="calc" id="vcalc">'+vCalcHTML(c)+'</div>'
      +(c.change>=100?'<label class="lbl" for="vav" style="text-align:left">Monnaie disponible en caisse (FC)</label><input id="vav" class="inp" inputmode="numeric" data-i="vav" autocomplete="off" placeholder="Laisser vide si toute la monnaie est disponible">':'');
-  }else h+='<h3>Quitter le mode client</h3><div class="muted small">Le vendeur tape son code.</div>';
+  }else h+='<h3>Quitter le mode client</h3><div class="muted small" style="text-align:center">Le vendeur tape son code.</div>';
   if(num)h+='<div class="dots" id="vdots" style="min-height:20px"></div>';
   else h+='<div class="note" style="margin-top:12px;text-align:left">Votre code contient des lettres : demandez au propriétaire de le remplacer par un code de 4 à 6 chiffres.</div><input id="vcode" type="password" class="inp" style="margin-top:10px" autocomplete="off" placeholder="Code vendeur">';
   h+='<div class="pin-msg" id="vmsg" role="alert"></div>';
   if(num){var k='';['1','2','3','4','5','6','7','8','9'].forEach(function(n){k+='<button data-a="vk" data-v="'+n+'" aria-label="'+n+'">'+n+'</button>'});
     k+='<button class="fn" data-a="vk" data-v="clr">Effacer</button><button data-a="vk" data-v="0" aria-label="0">0</button><button class="fn" data-a="vk" data-v="del" aria-label="Retour">⌫</button>';
     h+='<div class="keys">'+k+'</div>'}
-  h+='<div class="row" style="margin-top:14px">'+(mode==='bill'?'<button class="btn grow danger" data-a="vRefuse">Refuser</button>':'<button class="btn grow" data-a="vClose">Annuler</button>')+'<button class="btn primary grow" data-a="vOk">'+(mode==='bill'?'Valider la facture':'Valider')+'</button></div>'
-   +(mode==='bill'?'<button class="btn wide" style="margin-top:10px" data-a="vCancel">Annuler la commande</button>':'')+'</div>';
+  h+='<div class="row">'+(mode==='bill'?'<button class="btn grow danger" data-a="vRefuse">Refuser</button>':'<button class="btn grow" data-a="vClose">Annuler</button>')+'<button class="btn primary grow" data-a="vOk">'+(mode==='bill'?'Valider la facture':'Valider')+'</button></div>'
+   +(mode==='bill'?'<button class="btn wide" data-a="vCancel">Annuler la commande</button>':'')+'</div>';
   el.innerHTML=h;el.hidden=false;vDots();
 }
 function vClose(){V=null;var el=$('#vv');el.hidden=true;el.innerHTML=''}
