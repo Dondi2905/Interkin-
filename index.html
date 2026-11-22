@@ -1740,6 +1740,7 @@ function manageView(){
 function startSession(u,silent){
   U.user={id:u.id,name:u.name,role:u.role==='owner'?'owner':u.shift,pdvId:u.role==='owner'?(U.lpdv||(S.pdvs[0]&&S.pdvs[0].id)||null):u.pdvId};
   S.session={uid:u.id,pdvId:U.user.pdvId};U.tab='sale';U.spdv=null;U.sall=false;resetSale();
+  U.kiosk=U.user.role!=='owner'&&!!openShift(U.user.id);
   if(!silent){logEv('login','Connexion');ping()}
   save();render();window.scrollTo(0,0);
 }
