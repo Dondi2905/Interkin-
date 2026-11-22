@@ -158,8 +158,6 @@ html.kbd .dock{display:none}
 #vv{position:fixed;top:0;left:0;right:0;bottom:0;z-index:61;background:var(--bg);overflow:auto;padding:3px 12px calc(4px + env(safe-area-inset-bottom))}
 #vv .pin-card{display:flex;flex-direction:column;gap:3px;height:100%;max-width:420px;margin:0 auto}
 #vv .pin-tag{align-self:center;padding:3px 8px;font-size:10px}
-#vv .vtop{display:flex;align-items:center;justify-content:space-between;gap:8px}
-#vv .vtop .btn{min-height:24px;padding:0 10px;font-size:12px;line-height:22px}
 #vv h3{margin:0;font-size:17px;line-height:1.2;text-align:center}
 #vv .calc{margin:0;padding:3px 8px;gap:1px;font-size:13px;text-align:left}
 #vv .calc .l.t{font-size:14px}
@@ -809,9 +807,8 @@ function vMsg(m){var e=$('#vmsg');if(e)e.textContent=m||''}
 function vOpen(mode){
   if(Date.now()<(U.vlock||0)){toast('Validation bloquée : réessayez dans '+Math.ceil((U.vlock-Date.now())/1000)+' s.','bad');return}
   var num=SYNC_ON?Sync.codeNum():true;
-  V={mode:mode,digits:'',tries:0,num:num};if(mode==='bill')U.avail='';
-  V.y=window.pageYOffset||0;
-  var el=$('#vv'),h='<div class="pin-card">'+(mode==='bill'?'<div class="vtop"><button class="btn sm" data-a="vBack">← Modifier la commande</button><span class="pin-tag">Validation vendeur</span></div>':'<span class="pin-tag">Validation vendeur</span>');
+  V={mode:mode,digits:'',tries:0,num:num};V.y=window.pageYOffset||0;if(mode==='bill')U.avail='';
+  var el=$('#vv'),h='<div class="pin-card">'+'<span class="pin-tag">Validation vendeur</span>';
   if(mode==='bill'){var c=calc();
     h+='<h3>'+esc(c.cust?c.cust.name:'Client sans compte')+'</h3><div class="calc" id="vcalc">'+vCalcHTML(c)+'</div>'
      +(c.change>=100?'<label class="lbl" for="vav" style="text-align:left">Monnaie disponible en caisse (FC)</label><input id="vav" class="inp" inputmode="numeric" data-i="vav" autocomplete="off" placeholder="Laisser vide si toute la monnaie est disponible">':'');
@@ -822,7 +819,7 @@ function vOpen(mode){
   if(num){var k='';['1','2','3','4','5','6','7','8','9'].forEach(function(n){k+='<button data-a="vk" data-v="'+n+'" aria-label="'+n+'">'+n+'</button>'});
     k+='<button class="fn" data-a="vk" data-v="clr">Effacer</button><button data-a="vk" data-v="0" aria-label="0">0</button><button class="fn" data-a="vk" data-v="del" aria-label="Retour">⌫</button>';
     h+='<div class="keys">'+k+'</div>'}
-  h+='<div class="row">'+(mode==='bill'?'<button class="btn grow danger" data-a="vRefuse">Refuser</button>':'<button class="btn grow" data-a="vClose">Annuler</button>')+'<button class="btn primary grow" data-a="vOk">'+(mode==='bill'?'Valider la facture':'Valider')+'</button></div>'
+  h+='<div class="row">'+(mode==='bill'?'<button class="btn grow danger" data-a="vRefuse">Refuser / Modifier</button>':'<button class="btn grow" data-a="vClose">Annuler</button>')+'<button class="btn primary grow" data-a="vOk">'+(mode==='bill'?'Valider la facture':'Valider')+'</button></div>'
    +(mode==='bill'?'<button class="btn wide" data-a="vCancel">Annuler la commande</button>':'')+'</div>';
   el.innerHTML=h;el.hidden=false;vDots();
 }
@@ -841,8 +838,7 @@ function vOk(){
     if(m==='bill')finalizeSale();else{U.kiosk=false;render()}
   });
 }
-function vRefuse(){vClose();U.avail='';U.refuse='Facture non validée par le vendeur. Vérifiez le montant en espèces, puis appuyez de nouveau sur « Facturer ».';render();window.scrollTo(0,0)}
-function vBack(){var y=V?V.y:0;vClose();U.avail='';U.refuse='';render();try{window.scrollTo(0,y)}catch(e){}}
+function vRefuse(){var y=V&&V.y||0;vClose();U.avail='';U.refuse='1';render();try{window.scrollTo(0,y)}catch(e){}}
 function vCancel(){vClose();resetSale();render()}
 function kioskBar(){
   if(!U.user||U.user.role==='owner')return '';
@@ -856,7 +852,7 @@ function queueHTML(){
     return '<div class="item"><div class="grow"><b>N° '+pad(x.no)+'</b> · '+esc(x.who)+' <span class="muted small">'+tstr(x.ts)+'</span><div class="small">'+x.items.map(function(i){return i.qty+' × '+esc(i.name)}).join(', ')+'</div></div>'
      +(U.kiosk?'':'<button class="btn sm primary" data-a="served" data-id="'+esc(x.id)+'">Servi</button>')+'</div>'}).join('')+'</div>';
 }
-function refuseBanner(){return U.refuse?'<div class="note bad" style="margin-bottom:12px"><b>Facture non validée par le vendeur.</b><div class="small">Vérifiez le montant en espèces, puis appuyez de nouveau sur « Facturer ».</div></div>':''}
+function refuseBanner(){return U.refuse?'<div class="note bad" style="margin-bottom:12px"><b>Facture refusée par le vendeur.</b><div class="small">Motif : montant en espèces incorrect ou commande à modifier. Votre commande est conservée : modifiez-la si besoin (produits, points, espèces), puis appuyez de nouveau sur « Facturer ».</div></div>':''}
 
 /* ---------- géolocalisation (simulée dans la démo) ---------- */
 function ping(pdvId,who){
@@ -1793,7 +1789,7 @@ var A={
     U.fails[ph]=null;startSession(u);
   },
   vk:function(d){if(!V||!V.num)return;var v=d.v;if(v==='clr')V.digits='';else if(v==='del')V.digits=V.digits.slice(0,-1);else if(V.digits.length<12)V.digits+=v;vMsg('');vDots()},
-  vOk:vOk,vBack:vBack,vRefuse:vRefuse,vCancel:vCancel,vClose:vClose,
+  vOk:vOk,vRefuse:vRefuse,vCancel:vCancel,vClose:vClose,
   served:function(d){if(U.kiosk)return;S.queue=(S.queue||[]).filter(function(q){return q.id!==d.id});save();render()},
   kioskOn:function(){U.kiosk=true;U.tab='sale';render();window.scrollTo(0,0)},
   kioskOff:function(){vOpen('kiosk')},
