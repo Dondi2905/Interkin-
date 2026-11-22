@@ -158,7 +158,7 @@ h1,h2,h3{font-family:var(--font-head);margin:0;text-wrap:balance}
 #vv .pin-card{display:flex;flex-direction:column;gap:4px;height:100%;max-width:420px;margin:0 auto}
 #vv .pin-tag{align-self:center;padding:3px 8px;font-size:10px}
 #vv h3{margin:0;font-size:17px;line-height:1.2;text-align:center}
-#vv .calc{margin:0;padding:5px 8px;gap:1px;font-size:13px;text-align:left}
+#vv .calc{margin:0;padding:3px 8px;gap:1px;font-size:13px;text-align:left}
 #vv .calc .l.t{font-size:14px}
 #vv .calc .note{margin:3px 0 0;padding:4px 8px;font-size:12px}
 #vv .lbl{margin:0;font-size:12px;text-align:left}
@@ -170,6 +170,9 @@ h1,h2,h3{font-family:var(--font-head);margin:0;text-wrap:balance}
 #vv .keys button{min-height:0;height:100%;padding:0;font-size:22px}
 #vv .keys button.fn{font-size:13px}
 #vv .row{margin:0!important}
+#vv .calc .l.hl{padding:0 8px;margin:0 -2px;line-height:20px;border-radius:6px;font-weight:700}
+#vv .calc .l.rcv{background:var(--accent-soft);color:var(--accent)}
+#vv .calc .l.ret{background:var(--good-soft);color:var(--good)}
 #vv .btn{min-height:40px}
 #vv .btn.wide{margin:0!important;min-height:34px}
 #pin{position:fixed;top:0;left:0;right:0;bottom:0;z-index:60;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px}
@@ -297,7 +300,7 @@ window.__KVBOOT(function(){
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v72',APP_BUILD=39;
+var APP_VER='v75',APP_BUILD=39;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -532,7 +535,8 @@ function canAdd(id){
 function calc(){
   var cust=curCust(),total=cartTotal(),bal=cust?balance(cust.id):0,pu=0;
   if(cust&&U.usePoints&&U.unlocked)pu=Math.max(0,Math.min(r2(parseFloat(String(U.pts).replace(',','.'))||0),total,bal));
-  var due=total-pu,paid=r2(parseFloat(String(U.cash).replace(',','.'))||0),change=Math.max(0,paid-due);
+  var due=total-pu,paid=r2(parseFloat(String(U.cash).replace(',','.'))||0),change=Math.max(0,r2(paid-due));
+  var minCash=due>0?Math.ceil(due/50-1e-9)*50:0;
   var buyer=0,p1=0,p2=0,keep=0;
   if(cust&&pu===0)U.cart.forEach(function(i){buyer+=i.qty*i.b;p1+=i.qty*i.p1;p2+=i.qty*i.p2});
   var ret=0,rest=0,availErr='';
@@ -544,8 +548,9 @@ function calc(){
   var s1=cust?sponsorOf(cust):null,s2=s1?sponsorOf(s1):null,err='';
   if(!U.cart.length)err='Le panier est vide.';
   else if(U.client===undefined)err='Choisissez un client ou « Sans compte ».';
-  else if(paid<due)err='Il manque '+fmt(due-paid)+' FC.';
-  return {cust:cust,total:total,bal:bal,pu:pu,due:due,paid:paid,change:change,keep:keep,ret:ret,rest:rest,availErr:availErr,buyer:buyer,p1:p1,p2:p2,s1:s1,s2:s2,err:err,earned:buyer+keep};
+  else if(paid<due)err='Il manque '+fmt(due-paid)+' FC (minimum à donner : '+fmt(minCash)+' FC).';
+  else if(Math.abs(paid/50-Math.round(paid/50))>1e-9)err='Les espèces doivent être un multiple de 50 FC (minimum : '+fmt(minCash)+' FC).';
+  return {minCash:minCash,cust:cust,total:total,bal:bal,pu:pu,due:due,paid:paid,change:change,keep:keep,ret:ret,rest:rest,availErr:availErr,buyer:buyer,p1:p1,p2:p2,s1:s1,s2:s2,err:err,earned:buyer+keep};
 }
 
 var liveChk=false;
@@ -789,8 +794,8 @@ function vCalcHTML(c){
   var h='<div class="l"><span class="muted">Total</span><span>'+fmt(c.total)+' FC</span></div>';
   if(c.pu>0)h+='<div class="l"><span class="muted">Payé avec des points</span><span class="pts">− '+fmt(c.pu)+' FC</span></div>';
   h+='<div class="l t"><span>À payer en espèces</span><span>'+fmt(c.due)+' FC</span></div>'
-    +'<div class="l"><span class="muted">Espèces à recevoir du client</span><b>'+fmt(c.paid)+' FC</b></div>'
-    +'<div class="l"><span class="muted">Monnaie à rendre</span><b>'+fmt(c.ret)+' FC</b></div>';
+    +'<div class="l hl rcv"><span>▼ Espèces à recevoir du client</span><b>'+fmt(c.paid)+' FC</b></div>'
+    +'<div class="l'+(c.ret>0?' hl ret':'')+'"><span'+(c.ret>0?'':' class="muted"')+'>▲ Monnaie à rendre</span><b>'+fmt(c.ret)+' FC</b></div>';
   if(c.keep>0)h+='<div class="l"><span class="muted">Monnaie transformée en points</span><span class="pts">'+fmt(c.keep)+' pts</span></div>';
   if(c.rest>0)h+='<div class="l"><span class="muted">Non rendu (moins de 100 FC)</span><span>'+fmt(c.rest)+' FC</span></div>';
   if(c.availErr)h+='<div class="note bad" style="margin-top:8px">'+esc(c.availErr)+'</div>';
@@ -1008,9 +1013,13 @@ function payHTML(){
     h+='<button class="btn wide'+(on?' on':'')+'" data-a="togglePts">'+(on?'Points utilisés ✓ (annuler)':'Payer avec des points ('+fmt(c.bal)+' pts)')+'</button>';
     if(on)h+='<label class="lbl" for="pts">Points à utiliser (1 point = 1 FC)</label><input id="pts" class="inp" inputmode="decimal" data-i="pts" value="'+esc(U.pts)+'"><div class="hint" style="margin-top:4px">Maximum '+fmt(Math.min(c.bal,c.total))+' pts. Complétez avec des espèces si besoin.</div>';
   }
-  h+='<label class="lbl" for="cash">Espèces reçues (FC)</label><input id="cash" class="inp" inputmode="decimal" data-i="cash" value="'+esc(U.cash)+'" placeholder="0">';
-  h+='<div class="quick"><button class="btn sm" data-a="quick" data-v="exact">Montant exact</button>'+[1000,5000,10000,20000].map(function(v){return '<button class="btn sm" data-a="quick" data-v="'+v+'">'+fmt(v)+'</button>'}).join('')+'</div>';
+  h+='<label class="lbl" for="cash">Espèces reçues (FC, multiple de 50)</label><input id="cash" class="inp" inputmode="decimal" data-i="cash" value="'+esc(U.cash)+'" placeholder="0"><div id="minBox">'+minHTML(c)+'</div>';
+  h+='<div class="quick"><button class="btn sm" data-a="quick" data-v="exact">Minimum</button>'+[1000,5000,10000,20000].map(function(v){return '<button class="btn sm" data-a="quick" data-v="'+v+'">'+fmt(v)+'</button>'}).join('')+'</div>';
   return h+'<div class="calc" id="payCalc">'+calcHTML(c)+'</div>';
+}
+function minHTML(c){
+  if(!U.cart.length||U.client===undefined)return '';
+  return '<div style="margin:6px 0 0;color:var(--accent);font-weight:700">Minimum à donner : '+fmt(c.minCash)+' FC'+(c.pu>0?' <span class="small" style="font-weight:500">(après '+fmt(c.pu)+' pts)</span>':'')+'</div>'+(c.due>0&&c.minCash!==c.due?'<div class="small muted">Arrondi au multiple de 50 FC supérieur : pas de petite monnaie en dessous de 50 FC.</div>':'');
 }
 function calcHTML(c){
   var h='<div class="l"><span class="muted">Total</span><span>'+fmt(c.total)+' FC</span></div>';
@@ -1048,7 +1057,7 @@ function refreshSale(){
   $('#prodBox').innerHTML=prodHTML();$('#cartBox').innerHTML=cartHTML();$('#clientBox').innerHTML=clientHTML();$('#payBox').innerHTML=payHTML();refreshAction();
 }
 function refreshPay(){$('#payBox').innerHTML=payHTML();refreshAction()}
-function refreshCalc(){var el=$('#payCalc');if(el)el.innerHTML=calcHTML(calc());refreshAction()}
+function refreshCalc(){var c=calc(),el=$('#payCalc');if(el)el.innerHTML=calcHTML(c);var mb=$('#minBox');if(mb)mb.innerHTML=minHTML(c);refreshAction()}
 function refreshAction(){var el=$('#actionBar');if(el&&U.tab==='sale')el.innerHTML=actionHTML();sizeDock()}
 function sizeDock(){var d=$('#dock');if(!d.hidden)document.documentElement.style.setProperty('--dockH',(d.offsetHeight+24)+'px')}
 
@@ -1926,7 +1935,7 @@ var A={
     openPin({mode:'verify',title:'Code secret du client',sub:cust.name,verify:function(p){return hashPin(p,cust.id)===cust.pin},
       onOk:function(){U.usePoints=true;U.unlocked=true;U.pts=String(Math.min(balance(cust.id),cartTotal()));refreshPay()}});
   },
-  quick:function(d){U.cash=d.v==='exact'?String(calc().due):String(d.v);refreshPay()},
+  quick:function(d){U.cash=d.v==='exact'?String(calc().minCash):String(d.v);refreshPay()},
   keep:function(){U.keep=!U.keep;refreshCalc()},
   checkout:function(){var c=calc();if(c.err){toast(c.err,'bad');return}if(U.user.role!=='owner'){U.refuse='';vOpen('bill')}else finalizeSale()},
   pk:function(d){pinKey(d.v)},
