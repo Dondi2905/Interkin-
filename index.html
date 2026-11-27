@@ -212,6 +212,13 @@ html.kbd .dock{display:none}
 #toast.show{opacity:1}
 @media (prefers-reduced-motion:reduce){#toast{transition:none}.prod:active{transform:none}}
 svg.map,svg.chart{width:100%;height:auto;display:block}
+.hrow{display:grid;grid-template-columns:44px 1fr 118px;align-items:center;gap:8px;padding:3px 0;font-size:13px}
+.hrow .hb{height:14px;border-radius:4px;background:var(--line,#ddd);position:relative;overflow:hidden}
+.hrow .hb i{position:absolute;left:0;top:0;bottom:0;background:var(--muted,#8a8f98);border-radius:4px}
+.hrow.top .hb i{background:var(--accent)}
+.hrow.top{font-weight:700}
+.hrow .hv{text-align:right;white-space:nowrap}
+
 svg.map{background:var(--surface-2);border-radius:8px;border:1px solid var(--line)}
 </style>
 </head>
@@ -301,7 +308,7 @@ window.__KVBOOT(function(){
 
 /* ---------- utilitaires ---------- */
 var SB={url:'https://ggkdikvprvbyacizhfjp.supabase.co',key:'sb_publishable_4-zI66V4USe4jMEd8padrA_wg3jMC-E'};   /* renseigné à la publication : adresse et clé publique Supabase */
-var APP_VER='v76',APP_BUILD=40;
+var APP_VER='v77',APP_BUILD=41;
 var SYNC_ON=!!SB.url;
 var KEY=SYNC_ON?'interkin-data-v1':'fflexy-pos-demo-v2';
 var DEMO=SYNC_ON?'':' <span class="demo">Démo</span>';
@@ -1404,13 +1411,32 @@ function reportsView(){
       return '<button class="rowbtn" data-a="sdetail" data-id="'+sl.id+'" style="align-items:flex-start"><div class="grow"><div style="font-weight:600">'+esc(sl.name)+(sl.gone?' (supprimé)':'')+'</div><div class="small muted">'+(pd?'PDV '+esc(pd.name)+' · ':'')+q.n+' ticket(s)</div>'
         +'<div class="small num muted" style="margin-top:3px">Jour '+fmt(t3[0])+' · Semaine '+fmt(t3[1])+' · Mois '+fmt(t3[2])+'</div>'+(function(){var pi=payInfo(sl.id,U.rper);return (pi.mq?(pi.left>0?'<div class="small num bad">Manque de caisse − '+fmt(pi.mq)+(pi.paid>0?' · remboursé '+fmt(pi.paid):'')+' · <b>reste '+fmt(pi.left)+'</b> · base '+fmt(pi.base)+' FC</div>':'<div class="small num good">Manque de '+fmt(pi.mq)+' FC remboursé · base '+fmt(pi.base)+' FC</div>'):'')+(pi.rate?'<div class="small num">Rémunération '+fmt(pi.rem)+' FC ('+pi.rate+' %)</div>':'')+(pi.debt>0?'<div class="small num bad">Dette de caisse '+fmt(pi.debt)+' FC</div>':'')})()+'</div><b class="num">'+fmt(q.total)+' FC</b></button>'}).join('')
       +'<div class="hint" style="margin-top:8px">Le montant de droite suit la période choisie ci-dessous. Touchez un vendeur pour voir ses ventes.</div></div>'}
-  if(owner)h+=waterReport();
+  if(owner)h+=peakHTML(list)+waterReport();
   h+='<h2 class="h">Tickets</h2><div class="card">'+(list.length?list.slice(0,60).map(function(s){var p=pdvById(s.pdvId);
     return '<button class="rowbtn" data-a="openSale" data-id="'+s.id+'"><div class="grow"><div style="font-weight:600">N° '+pad(s.no)+' · '+tstr(s.ts)+(U.rper!=='today'?' · '+dstr(s.ts):'')+'</div><div class="small muted">'+esc(s.custName||'Sans compte')+' · '+(p?esc(p.name):'')+' · '+esc(s.sellerName||ROLE[s.role])+'</div></div>'
       +'<div style="text-align:right"><b class="num">'+fmt(s.total)+' FC</b>'+(s.pointsUsed?'<div class="small pts num">payé en points '+fmt(s.pointsUsed)+'</div>':'')+'</div></button>'}).join('')+(list.length>60?'<div class="hint" style="padding-top:10px">60 derniers tickets affichés sur '+list.length+'.</div>':''):'<div class="muted">Aucune vente sur cette période.</div>')+'</div>';
   if(owner){var can=inPeriod(S.sales.filter(function(x){return x.cancelled}),U.rper);
     if(can.length)h+='<h2 class="h">Ventes annulées ('+can.length+')</h2><div class="card">'+can.slice(0,30).map(function(x){return '<button class="rowbtn" data-a="openSale" data-id="'+x.id+'"><div class="grow"><div style="font-weight:600">N° '+pad(x.no)+' · '+dstr(x.ts)+' '+tstr(x.ts)+'</div><div class="small muted">'+esc(x.sellerName||'')+' · motif : '+esc(x.cancelled.reason)+'</div></div><b class="num" style="text-decoration:line-through">'+fmt(x.total)+' FC</b></button>'}).join('')+'</div>'}
   return h;
+}
+function peakHTML(list){
+  var n=list.length;
+  var H='<h2 class="h">Affluence par heure · '+PERLAB[U.rper]+'</h2>';
+  if(!n)return H+'<div class="card"><div class="hint">Aucune vente sur cette période.</div></div>';
+  var hr=[],i;for(i=0;i<24;i++)hr.push({n:0,t:0});
+  var wd=[0,1,2,3,4,5,6].map(function(){return {n:0,t:0}});
+  list.forEach(function(x){var d=new Date(x.ts),h=hr[d.getHours()],w=wd[(d.getDay()+6)%7];h.n++;h.t+=x.total;w.n++;w.t+=x.total});
+  var lo=0,hi=23;while(lo<23&&!hr[lo].n)lo++;while(hi>0&&!hr[hi].n)hi--;
+  var mx=0,best=lo;for(i=lo;i<=hi;i++)if(hr[i].n>mx){mx=hr[i].n;best=i}
+  var two=function(v){return (v<10?'0':'')+v+' h'};
+  var rows=function(a,lab,top,mxv){return a.map(function(o,k){return '<div class="hrow'+(k===top&&o.n?' top':'')+'"><span>'+lab(k)+'</span><span class="hb"><i style="width:'+(mxv?Math.round(o.n/mxv*100):0)+'%"></i></span><span class="hv num">'+o.n+' · '+fmt(o.t)+' FC</span></div>'}).join('')};
+  var seg=hr.slice(lo,hi+1);
+  var h='<div class="card"><div class="note pts" style="margin:0 0 8px"><b>Heure de pointe : '+two(best)+' – '+two((best+1)%24)+'</b><div class="small">'+hr[best].n+' ticket(s) · '+fmt(hr[best].t)+' FC, soit '+Math.round(hr[best].n/n*100)+' % des tickets de la période.</div></div>'
+    +'<div class="sub-h">Tickets et chiffre d’affaires par heure</div>'+rows(seg,function(k){return two(lo+k)},best-lo,mx)+'</div>';
+  if(U.rper!=='today'){var dmx=0,db=0;wd.forEach(function(o,k){if(o.n>dmx){dmx=o.n;db=k}});
+    var DN=['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
+    h+='<div class="sub-h" style="margin-top:14px">Par jour de la semaine</div><div class="card">'+rows(wd,function(k){return DN[k].slice(0,3)+'.'},db,dmx)+'</div>';}
+  return H+h+'<p class="hint" style="margin:8px 2px 0">Chaque ligne : nombre de tickets · chiffre d’affaires. Les ventes annulées ne sont pas comptées. Heures de l’appareil.</p>';
 }
 function waterReport(){
   var t0=periodStart(U.rper),dr=0,net=0,any=false;
